@@ -1,0 +1,701 @@
+vibepp: "0.2"
+methodology: "PDA"  # Possibility-Driven Architecture v1.1 (Максим, 2026)
+
+# ═══════════════════════════════════════════════════════
+# ÆON MAP SYSTEM — MAX BOT
+# Машинная спецификация для агентной разработки
+# ═══════════════════════════════════════════════════════
+
+project:
+  name: "AeonMapMaxBot"
+  type: "conversational-ai-bot"
+  platform: "MAX (VK messenger, Bot API)"
+  summary: >
+    ИИ-бот в мессенджере MAX, который ведёт адаптивный диалог с пользователем
+    и строит многослойный профиль личности по архитектуре ÆON Map System.
+    Каждый ответ пользователя — это событие. Профиль — это read model поверх
+    event log. Диалог — это живая система, управляемая LLM-ядром и PDA-инвариантами.
+
+purpose:
+  goal: >
+    Снизить неопределённость пользователя о себе: кто он, как думает,
+    чего хочет, где его ограничения, какой архетип, куда расти.
+  problem: >
+    Человек не понимает своих паттернов — когнитивных, эмоциональных,
+    стратегических. Существующие тесты (MBTI, соционика) статичны,
+    поверхностны и не дают персонализированного пути развития.
+  outcome: >
+    Пользователь получает ÆON-профиль: визуальная карта личности по 7 слоям,
+    текстовые инсайты, архетип, зоны роста, и Book of Consciousness —
+    история трансформации, которая пополняется при каждой сессии.
+  pda_framing: >
+    Приложение — это машина, которая снижает неопределённость пользователя
+    о себе, закрепляя устойчивые инварианты идентичности через акты
+    определённости (ответы в диалоге).
+
+# ───────────────────────────────────────────────────────
+# ПОЛЬЗОВАТЕЛИ
+# ───────────────────────────────────────────────────────
+
+audience:
+  primary:
+    - "люди в точке выбора: карьера, отношения, смыслы"
+    - "практики саморазвития, коучинга, психологии"
+    - "предприниматели и лидеры, строящие команды"
+  secondary:
+    - "коучи и терапевты (используют бот как диагностику)"
+    - "HR-специалисты (совместимость, роли)"
+  jtbd:
+    - "не понимаю, в чём моя реальная сила"
+    - "хочу понять свои паттерны, не проходя долгую терапию"
+    - "хочу видеть, как я меняюсь со временем"
+    - "хочу понять, почему у меня не выходит X"
+
+# ───────────────────────────────────────────────────────
+# КАРТА НЕОПРЕДЕЛЁННОСТИ (PDA Step 1)
+# ───────────────────────────────────────────────────────
+
+uncertainty_map:
+  user_level:
+    - "Как я думаю и принимаю решения?"
+    - "Что меня на самом деле мотивирует?"
+    - "Почему я повторяю одни и те же сценарии?"
+    - "Каковы мои реальные ценности, а не декларируемые?"
+    - "Где мои скрытые таланты?"
+    - "Что мне мешает — страхи, барьеры, тень?"
+    - "Какая среда и ритм жизни мне подходят?"
+    - "С какими людьми я в резонансе?"
+    - "Как я выгляжу в команде vs как себя чувствую?"
+    - "Куда мне развиваться в следующие 12 месяцев?"
+  system_level:
+    - "Насколько уверенно назначена та или иная карта?"
+    - "Не противоречат ли ответы пользователя друг другу?"
+    - "Готов ли пользователь к следующему слою?"
+    - "Нет ли признаков кризисного состояния?"
+    - "Корректен ли профиль или нужна калибровка?"
+
+# ───────────────────────────────────────────────────────
+# ГРАФ ДОМЕНА (PDA Step 3)
+# ───────────────────────────────────────────────────────
+
+domain_graph:
+  entities:
+    User:
+      fields: [id, max_user_id, created_at, locale]
+      note: "идентификатор из MAX, никакой PII за пределами этого"
+    Session:
+      fields: [id, user_id, layer, status, started_at, completed_at]
+      statuses: [active, completed, abandoned, paused]
+    Answer:
+      fields: [id, session_id, question_id, value, answered_at]
+      note: "неизменяемый факт — только append"
+    Card:
+      fields: [id, user_id, card_type, confidence, version, computed_at]
+      card_types:
+        - CognitiveIdentityMap
+        - BehavioralPatternMap
+        - AeonConsciousnessMap
+        - AffectiveResonanceMap
+        - CoreValuesMap
+        - LatentPotentialMap
+        - StrategicSelfMap
+        - LimitMap
+        - EvolutionMap
+        - ArchetypeMatrix
+        - SocialPersonaMap
+        - ShadowMirrorMap
+        - RoutineGrowthMap
+        - EnergyFlowMap
+        - ResonanceMap
+        - CompatibilityMap
+        - LearningMap
+        - EnvironmentMap
+    AeonProfile:
+      fields: [id, user_id, glyph_code, activation_phrase, version, built_at]
+      note: "read model — пересобирается из events"
+    Glyph:
+      fields: [id, user_id, svg_data, meaning, created_at]
+      note: "визуальный символ идентичности, генерируется LLM"
+    BookOfConsciousness:
+      fields: [id, user_id, entries]
+      note: "таймлайн трансформации — только append"
+    LlmCall:
+      fields: [id, session_id, model, prompt_version, input_hash, output, latency_ms, called_at]
+      note: "каждый вызов LLM фиксируется для воспроизводимости"
+
+  edges:
+    - "User has_many Session"
+    - "User has_one AeonProfile"
+    - "User has_one BookOfConsciousness"
+    - "User has_many Card"
+    - "User has_many Glyph"
+    - "Session has_many Answer"
+    - "Session belongs_to Layer"
+    - "Answer contributes_to Card (через event-проекцию)"
+    - "Card aggregates_into AeonProfile"
+    - "Session generates LlmCall"
+    - "LlmCall produces next_question"
+    - "AeonProfile generates Glyph"
+    - "BookOfConsciousness records Session.completed"
+
+# ───────────────────────────────────────────────────────
+# ИНВАРИАНТЫ (PDA Step 4)
+# ───────────────────────────────────────────────────────
+
+invariants:
+  domain:
+    - id: INV-01
+      rule: "Session может иметь ровно один статус из {active, completed, abandoned, paused}"
+      enforcement: "domain validator + DB constraint"
+
+    - id: INV-02
+      rule: "Answer неизменяем после записи. Пользователь не может редактировать ответ — только пройти новую сессию"
+      enforcement: "append-only table, no UPDATE/DELETE in ORM"
+
+    - id: INV-03
+      rule: "Card назначается только при confidence >= CARD_CONFIDENCE_THRESHOLD (default: 0.72)"
+      enforcement: "Stability Engine, не LLM"
+
+    - id: INV-04
+      rule: "Card не может быть в двух взаимоисключающих состояниях одновременно (например, CognitiveType=Analytical и CognitiveType=Intuitive с равным весом без флага 'синтетик')"
+      enforcement: "domain validator перед записью Card"
+
+    - id: INV-05
+      rule: "Session следующего слоя не открывается, пока предыдущий слой не имеет минимум MIN_ANSWERS_PER_LAYER ответов"
+      enforcement: "Stability Engine"
+
+    - id: INV-06
+      rule: "LlmCall сохраняется до выдачи ответа пользователю, не после"
+      enforcement: "транзакция: write LlmCall → send message"
+
+    - id: INV-07
+      rule: "Одно сообщение пользователя = не более одного Answer event (идемпотентность)"
+      enforcement: "idempotency_key = max_update_id"
+
+    - id: INV-08
+      rule: "AeonProfile пересобирается только из зафиксированных событий, никогда не редактируется вручную"
+      enforcement: "profile builder принимает только event store на вход"
+
+  safety:
+    - id: INV-S01
+      rule: "При обнаружении кризисных маркеров (суицид, самоповреждение, насилие) бот прекращает профилирование и предлагает горячую линию"
+      enforcement: "safety classifier на каждом пользовательском input до LLM"
+
+    - id: INV-S02
+      rule: "Бот не даёт медицинских, юридических, финансовых советов — только рефлексивные вопросы и инсайты"
+      enforcement: "системный промпт + content filter"
+
+# ───────────────────────────────────────────────────────
+# КОНСТАНТЫ (PDA Step 5)
+# ───────────────────────────────────────────────────────
+
+constants:
+  - key: CARD_CONFIDENCE_THRESHOLD
+    value: 0.72
+    why: "ниже — карта ненадёжна и вводит пользователя в заблуждение"
+    breaks_without: "профиль будет строиться на слабых сигналах"
+    calibration: "A/B по retention и user feedback после профиля"
+
+  - key: MIN_ANSWERS_PER_LAYER
+    value: 4
+    why: "меньше — LLM не имеет достаточно контекста для следующего слоя"
+    breaks_without: "профиль будет поверхностным, слои не связаны"
+    calibration: "анализ completion rate по слоям"
+
+  - key: MAX_QUESTIONS_PER_SESSION
+    value: 12
+    why: "больше — усталость, дропы; меньше — недостаточно сигналов"
+    breaks_without: "либо дроп в середине, либо слабый профиль"
+    calibration: "замер session_completion_rate по длинам"
+
+  - key: SESSION_IDLE_TIMEOUT_MIN
+    value: 30
+    why: "30 минут молчания = сессия брошена; восстанавливаем контекст при возврате"
+    breaks_without: "ghost sessions, утечка памяти в Redis"
+    calibration: "медиана времени между ответами + буфер"
+
+  - key: LLM_QUESTION_TEMP
+    value: 0.7
+    why: "достаточно вариативно для живого диалога, не галлюцинирует вопросы"
+    breaks_without: "слишком предсказуемо (0.0) или хаотично (1.0+)"
+    calibration: "blind A/B оценка качества вопросов операторами"
+
+  - key: DAILY_SESSION_LIMIT
+    value: 3
+    why: "защита от злоупотреблений и LLM-затрат; 3 сессии в день — норма"
+    breaks_without: "спам-атаки, неожиданные расходы"
+    calibration: "анализ percentile-99 по сессиям/день"
+
+  - key: MAX_BOT_REPLY_TIMEOUT_SEC
+    value: 8
+    why: "MAX UI показывает typing indicator; > 8 сек — пользователь думает, что сломалось"
+    breaks_without: "плохой UX, повторные нажатия, дубли"
+    calibration: "p95 latency LLM + overhead"
+
+# ───────────────────────────────────────────────────────
+# EVENT CORE (PDA Step 6)
+# ───────────────────────────────────────────────────────
+
+events:
+  schema_version: 1
+  contract:
+    required_fields:
+      - event_id        # uuid v7
+      - event_type      # snake_case string
+      - occurred_at     # ISO 8601 UTC
+      - actor           # {id, role}
+      - subject         # {entity, id}
+      - payload         # object
+      - idempotency_key # max_update_id или generated uuid
+      - schema_version  # integer
+    optional_fields:
+      - causation_id    # uuid предыдущего event
+      - correlation_id  # uuid сессии/флоу
+
+  catalog:
+    - type: user.started
+      trigger: "первый /start в MAX"
+      payload: [max_user_id, locale, referral_source]
+
+    - type: session.opened
+      trigger: "бот открыл новую сессию"
+      payload: [session_id, layer, question_count_plan]
+
+    - type: question.asked
+      trigger: "бот отправил вопрос пользователю"
+      payload: [session_id, question_id, question_text, layer, llm_call_id]
+
+    - type: answer.given
+      trigger: "пользователь ответил"
+      payload: [session_id, question_id, answer_value, answer_type]
+      note: "НЕИЗМЕНЯЕМ после записи (INV-02)"
+
+    - type: llm.called
+      trigger: "вызов Claude API"
+      payload: [session_id, model, prompt_version, input_hash, latency_ms]
+      note: "фиксируется до отправки ответа (INV-06)"
+
+    - type: card.computed
+      trigger: "Stability Engine назначил карту"
+      payload: [card_type, confidence, input_answer_ids, version]
+
+    - type: session.completed
+      trigger: "сессия завершена (все вопросы отвечены)"
+      payload: [session_id, duration_sec, answers_count, layers_covered]
+
+    - type: profile.built
+      trigger: "ÆON-профиль пересобран из событий"
+      payload: [profile_version, cards_included, glyph_id]
+
+    - type: safety.triggered
+      trigger: "safety classifier поймал кризисный маркер"
+      payload: [session_id, trigger_category, action_taken]
+      note: "НЕ содержит оригинальный текст пользователя"
+
+    - type: session.abandoned
+      trigger: "SESSION_IDLE_TIMEOUT истёк"
+      payload: [session_id, last_answer_at, answers_count]
+
+# ───────────────────────────────────────────────────────
+# АРХИТЕКТУРА (PDA Step 6)
+# ───────────────────────────────────────────────────────
+
+architecture:
+  approach: "Event-sourced, domain-centric, stability-first"
+
+  layers:
+    max_adapter:
+      role: "принимает webhook от MAX, отдаёт ответы"
+      responsibilities:
+        - "парсинг MAX update"
+        - "идемпотентность по update_id"
+        - "форматирование сообщений и кнопок MAX"
+      must_not: "содержать бизнес-логику"
+
+    api_layer:
+      role: "HTTP endpoints, auth, rate limiting"
+      note: "только роутинг и валидация входа"
+
+    domain_layer:
+      role: "инварианты, валидаторы, доменные сущности"
+      must: "работать без I/O — чистый код"
+      must_not: "знать о MAX, LLM, БД"
+
+    stability_engine:
+      role: "лимиты, пороги уверенности, анти-абуз, safety"
+      responsibilities:
+        - "проверка DAILY_SESSION_LIMIT"
+        - "проверка CARD_CONFIDENCE_THRESHOLD"
+        - "safety classifier (до LLM)"
+        - "rate limiter по user_id"
+      must: "быть отдельным модулем, не размазан по коду"
+
+    dialog_engine:
+      role: "адаптивный диалог, управление состоянием сессии"
+      responsibilities:
+        - "выбор следующего вопроса (через LLM или fallback)"
+        - "трекинг прогресса по слоям"
+        - "определение момента перехода к следующему слою"
+      must: "работать через events — каждый шаг = event"
+
+    llm_client:
+      role: "вызовы Claude API, промпты, версионирование"
+      responsibilities:
+        - "системный промпт с контекстом пользователя"
+        - "версионирование prompt templates"
+        - "логирование каждого вызова (LlmCall event)"
+        - "fallback при timeout"
+
+    aeon_engine:
+      role: "вычисление карт, построение профиля, генерация глифа"
+      input: "только event store"
+      output: "Card, AeonProfile, Glyph"
+
+    event_core:
+      role: "append-only event store"
+      storage: "PostgreSQL, таблица events"
+      must: "не иметь UPDATE/DELETE"
+
+    read_models:
+      role: "проекции для быстрого чтения"
+      models:
+        - "UserProfile (для отправки профиля пользователю)"
+        - "SessionContext (текущее состояние сессии для LLM)"
+        - "BookOfConsciousness (таймлайн для пользователя)"
+      rebuild: "из event store при необходимости"
+
+  data_flow: |
+    MAX Webhook
+        │
+        ▼
+    [MAX Adapter] ──idempotency check──▶ skip if duplicate
+        │
+        ▼
+    [Stability Engine] ──safety check──▶ crisis: send hotline, stop
+        │           └──rate limit──▶ 429, stop
+        ▼
+    [Dialog Engine]
+        │   reads SessionContext (read model)
+        │
+        ├──▶ [LLM Client] ──▶ llm.called event ──▶ next question text
+        │
+        ▼
+    answer.given event ──▶ [Event Core]
+        │
+        ├──▶ [Aeon Engine] ──▶ card.computed event (if threshold met)
+        │
+        └──▶ [MAX Adapter] ──▶ send message to user
+
+  stack:
+    language: "Python 3.12 (asyncio)"
+    web: "FastAPI"
+    database: "PostgreSQL 16"
+    cache: "Redis 7 (сессии, rate limits)"
+    llm: "Anthropic Claude (claude-sonnet-4-6)"
+    containerization: "Docker + docker-compose"
+    testing: "pytest + hypothesis (property-based для инвариантов)"
+    observability: "OpenTelemetry + Prometheus-совместимые метрики"
+
+# ───────────────────────────────────────────────────────
+# СТРУКТУРА ПРОЕКТА
+# ───────────────────────────────────────────────────────
+
+project_structure:
+  style: "domain-centric monolith (v1), готов к разделению"
+  directories:
+    - path: "src/domain/"
+      purpose: "сущности, инварианты, валидаторы — чистый код без I/O"
+    - path: "src/events/"
+      purpose: "event store, контракты, идемпотентность"
+    - path: "src/stability/"
+      purpose: "Stability Engine: лимиты, safety, пороги"
+    - path: "src/dialog/"
+      purpose: "движок диалога, FSM слоёв, управление сессией"
+    - path: "src/aeon/"
+      purpose: "карты ÆON Map, профиль, глиф, Book of Consciousness"
+    - path: "src/llm/"
+      purpose: "Claude клиент, prompt templates (версионированные)"
+    - path: "src/integrations/max/"
+      purpose: "MAX Bot API клиент, webhook handler"
+    - path: "src/read_models/"
+      purpose: "проекции: SessionContext, UserProfile, BookOfConsciousness"
+    - path: "src/api/"
+      purpose: "HTTP endpoints, роутинг"
+    - path: "tests/invariants/"
+      purpose: "property-based тесты на инварианты (pytest + hypothesis)"
+    - path: "tests/scenarios/"
+      purpose: "end-to-end сценарные тесты диалогов"
+    - path: "migrations/"
+      purpose: "SQL миграции (Alembic)"
+    - path: "docs/"
+      purpose: "спецификация: uncertainty-map, domain-graph, invariants, constants, events, architecture"
+    - path: "prompts/"
+      purpose: "версионированные prompt templates для LLM"
+
+# ───────────────────────────────────────────────────────
+# СЛОИ ÆON MAP — РЕАЛИЗАЦИЯ
+# ───────────────────────────────────────────────────────
+
+aeon_layers:
+  mvp:
+    - id: I
+      name: "Core Layer"
+      cards: [CognitiveIdentityMap, BehavioralPatternMap]
+      min_questions: 4
+      unlock_condition: "session.started"
+
+    - id: II
+      name: "Emotional & Motivational Layer"
+      cards: [AffectiveResonanceMap, CoreValuesMap]
+      min_questions: 4
+      unlock_condition: "Layer I completed"
+
+    - id: IV
+      name: "Archetype Layer"
+      cards: [ArchetypeMatrix]
+      min_questions: 4
+      unlock_condition: "Layer II completed"
+
+  v1_addition:
+    - id: III
+      name: "Strategic Layer"
+      cards: [StrategicSelfMap, LimitMap]
+    - id: V
+      name: "Dynamic AI Layer"
+      cards: [EnergyFlowMap, ResonanceMap]
+
+  v2_addition:
+    - id: VI
+      name: "Integration Layer"
+      cards: [CompatibilityMap, LearningMap, EnvironmentMap]
+    - id: VII
+      name: "Meta Layer"
+      cards: [AeonConsciousnessMap]
+      note: "включает генерацию Glyph и Book of Consciousness"
+
+# ───────────────────────────────────────────────────────
+# ДИАЛОГ
+# ───────────────────────────────────────────────────────
+
+dialog:
+  mode: "adaptive — следующий вопрос генерирует LLM с учётом всех предыдущих ответов"
+  fallback: "статичный список вопросов на случай LLM timeout"
+  answer_formats:
+    - type: buttons
+      use_when: "закрытые вопросы (выбор из 2–4 вариантов)"
+      max_options: 4
+    - type: free_text
+      use_when: "открытые вопросы глубокого слоя"
+    - type: scale
+      use_when: "оценка интенсивности"
+      range: "1–7"
+
+  persona:
+    name: "ÆON"
+    tone:
+      - "глубокий, но не тяжёлый"
+      - "любопытный исследователь, не судья"
+      - "конкретный — без воды и эзотерики"
+      - "тёплый, но не сюсюкающий"
+    boundaries:
+      - "не терапевт"
+      - "не ставит диагнозы"
+      - "не предсказывает будущее"
+      - "не сравнивает с другими людьми"
+
+  safety:
+    triggers:
+      - "суицидальные высказывания"
+      - "самоповреждение"
+      - "насилие (в отношении себя или других)"
+      - "острый психотический эпизод (контроль реальности)"
+    action: >
+      Остановить профилирование. Ответить тепло и без паники.
+      Предложить ресурсы: телефон доверия 8-800-2000-122 (РФ, бесплатно).
+      Зафиксировать safety.triggered event (без текста пользователя).
+
+# ───────────────────────────────────────────────────────
+# НАБЛЮДАЕМОСТЬ (PDA Step 7)
+# ───────────────────────────────────────────────────────
+
+observability:
+  dashboards:
+    user_clarity:
+      metrics:
+        - "time_to_clarity_sec: медиана времени от /start до profile.built"
+        - "session_completion_rate: доля сессий со статусом completed"
+        - "layer_dropoff_rate: где именно бросают"
+
+    domain_health:
+      metrics:
+        - "invariant_violations_total: нарушения инвариантов (должно быть ~0)"
+        - "card_rejection_rate: доля отклонённых карт (confidence < threshold)"
+        - "answer_conflict_rate: противоречивые ответы на похожие вопросы"
+
+    llm_quality:
+      metrics:
+        - "llm_latency_p95_ms"
+        - "llm_timeout_rate"
+        - "prompt_version_distribution: какие версии промптов в проде"
+
+    reliability:
+      metrics:
+        - "webhook_duplicate_rate: доля дедуплицированных MAX updates"
+        - "error_rate_5xx"
+        - "queue_lag_sec (если используется очередь)"
+
+    safety:
+      metrics:
+        - "safety_trigger_rate: доля сессий с safety.triggered"
+        - "crisis_category_distribution"
+
+  alerts:
+    - "invariant_violations_total > 0 за 5 минут → PagerDuty Critical"
+    - "session_completion_rate < 0.40 за 1 час → Slack Warning"
+    - "llm_latency_p95_ms > 6000 за 5 минут → Slack Warning"
+    - "safety_trigger_rate > 0.05 за 1 час → Slack Critical"
+
+# ───────────────────────────────────────────────────────
+# FEATURES
+# ───────────────────────────────────────────────────────
+
+features:
+  core:
+    - "Адаптивный диалог по слоям ÆON Map (MVP: слои I, II, IV)"
+    - "Каждый ответ сохраняется как неизменяемый event"
+    - "LLM-ядро генерирует следующий вопрос на основе всех предыдущих ответов"
+    - "Stability Engine контролирует пороги перед назначением карты"
+    - "ÆON-профиль строится как read model из event log"
+    - "Safety classifier работает до LLM на каждом сообщении"
+    - "Идемпотентность: дубли MAX-апдейтов игнорируются"
+    - "Book of Consciousness: каждая завершённая сессия добавляет запись"
+
+  secondary:
+    - "Glyph: уникальный SVG-символ профиля (генерируется LLM)"
+    - "Кнопки-ответы в MAX для закрытых вопросов"
+    - "Напоминание о незавершённой сессии через 24 часа"
+    - "Команда /profile — показать текущий профиль в любой момент"
+    - "Команда /history — Book of Consciousness"
+
+  out_of_scope_mvp:
+    - "Веб-интерфейс / Mini App MAX"
+    - "NFT-глифы и блокчейн"
+    - "Совместимость с другими пользователями (Compatibility Map)"
+    - "Экспорт профиля в PDF"
+    - "API для коучей и HR"
+    - "Мультиязычность (только RU в MVP)"
+
+# ───────────────────────────────────────────────────────
+# ПРАВИЛА
+# ───────────────────────────────────────────────────────
+
+rules:
+  hard:
+    - "НИКОГДА не писать UPDATE или DELETE в таблицу events — только INSERT"
+    - "НИКОГДА не пропускать safety check перед LLM-вызовом"
+    - "НИКОГДА не назначать Card без проверки CARD_CONFIDENCE_THRESHOLD"
+    - "НИКОГДА не хранить оригинальный текст пользователя в safety.triggered event"
+    - "НИКОГДА не строить профиль вне aeon_engine — только из event store"
+    - "НИКОГДА не разрешать более DAILY_SESSION_LIMIT сессий в день на пользователя"
+    - "Инварианты живут в domain/, а не в контроллерах или БД-триггерах"
+
+  firm:
+    - "Каждый LLM-вызов фиксируется в llm.called event ДО отправки ответа пользователю"
+    - "Константы — в конфиге, не в коде"
+    - "Prompt templates — версионированные файлы в /prompts, не строки в коде"
+    - "Property-based тесты на все инварианты (pytest + hypothesis)"
+    - "Webhook handler возвращает 200 немедленно, обработка — async"
+
+  soft:
+    - "Предпочитать читаемый код компактному"
+    - "Каждый новый инвариант сопровождается тестом до мержа"
+    - "При сомнении — добавить Constant Card в docs/constants.md"
+
+# ───────────────────────────────────────────────────────
+# ИТЕРАЦИИ (ROADMAP)
+# ───────────────────────────────────────────────────────
+
+iterations:
+  - id: 0
+    name: "Скелет"
+    deliverables:
+      - "репо, docker-compose (PostgreSQL + Redis + app)"
+      - "MAX webhook handler → ответ 'привет'"
+      - "первая миграция: таблица events"
+    done_when: "бот отвечает в MAX, событие user.started записано в БД"
+
+  - id: 1
+    name: "Event Core"
+    deliverables:
+      - "event store (append-only), контракт события"
+      - "идемпотентность по max_update_id"
+      - "user.started event при первом /start"
+    done_when: "дубль MAX update не создаёт дубль события"
+
+  - id: 2
+    name: "Первый вопрос"
+    deliverables:
+      - "dialog engine: открытие сессии (session.opened)"
+      - "статичный первый вопрос Core Layer (question.asked)"
+      - "сохранение ответа (answer.given)"
+    done_when: "пользователь отвечает, ответ в event store"
+
+  - id: 3
+    name: "LLM-диалог"
+    deliverables:
+      - "LLM client: Claude API"
+      - "следующий вопрос генерируется Claude на основе предыдущих ответов"
+      - "llm.called event, версионированный prompt"
+      - "fallback при timeout"
+    done_when: "5 адаптивных вопросов, каждый учитывает предыдущие ответы"
+
+  - id: 4
+    name: "Первая карта"
+    deliverables:
+      - "Stability Engine: проверка CARD_CONFIDENCE_THRESHOLD"
+      - "aeon_engine: CognitiveIdentityMap"
+      - "card.computed event"
+      - "INV-03 и INV-04 с property-based тестами"
+    done_when: "карта назначается при достижении порога, не раньше"
+
+  - id: 5
+    name: "MVP профиль"
+    deliverables:
+      - "слои I + II + IV (Core, Emotional, Archetype)"
+      - "AeonProfile read model"
+      - "команда /profile выдаёт текстовый профиль"
+      - "session.completed → запись в Book of Consciousness"
+    done_when: "пользователь проходит полную сессию и получает профиль"
+
+  - id: 6
+    name: "Наблюдаемость"
+    deliverables:
+      - "все метрики из observability.dashboards"
+      - "алерты"
+      - "dashboard в Grafana (или аналог)"
+    done_when: "все метрики видны, INV-алерт срабатывает на тест-нарушение"
+
+  - id: 7
+    name: "Safety + Glyph"
+    deliverables:
+      - "safety classifier (до LLM)"
+      - "safety.triggered flow с редиректом"
+      - "генерация Glyph через LLM"
+    done_when: "кризисное сообщение останавливает профилирование, глиф генерируется"
+
+# ───────────────────────────────────────────────────────
+# КРИТЕРИИ ПРИЁМКИ
+# ───────────────────────────────────────────────────────
+
+accept:
+  - "Пользователь пишет /start в MAX — бот приветствует и задаёт первый вопрос"
+  - "Каждый ответ фиксируется в event store как неизменяемый факт"
+  - "Следующий вопрос зависит от предыдущих ответов (адаптивность проверяется вручную)"
+  - "Кризисное сообщение останавливает диалог и предлагает горячую линию"
+  - "Дубль MAX update не создаёт дубль события (тест: отправить одинаковый update_id дважды)"
+  - "Card не назначается, если confidence < CARD_CONFIDENCE_THRESHOLD"
+  - "Все инварианты покрыты property-based тестами"
+  - "После завершения сессии: /profile выдаёт структурированный ÆON-профиль"
+  - "AeonProfile пересобирается из event store без потери данных"
+  - "Метрики invariant_violations_total видны в дашборде"
+  - "p95 latency ответа бота < MAX_BOT_REPLY_TIMEOUT_SEC"
