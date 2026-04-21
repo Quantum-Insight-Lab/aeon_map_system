@@ -89,6 +89,11 @@ domain_graph:
     Answer:
       fields: [id, session_id, question_id, value, answered_at]
       note: "неизменяемый факт — только append"
+    CardSignal:
+      fields: [id, user_id, card_type, weight, source_answer_id, source_layer, created_at]
+      note: >
+        копилка сигналов для карты; один ответ может породить несколько записей
+        (сквозной routing на разные card_type). Агрегация веса — вход для готовности Card.
     Card:
       fields: [id, user_id, card_type, confidence, version, computed_at]
       card_types:
@@ -114,8 +119,8 @@ domain_graph:
       fields: [id, user_id, glyph_code, activation_phrase, version, built_at]
       note: "read model — пересобирается из events"
     Glyph:
-      fields: [id, user_id, svg_data, meaning, created_at]
-      note: "визуальный символ идентичности, генерируется LLM"
+      fields: [id, user_id, image_url, meaning, created_at]
+      note: "визуальный символ идентичности; OpenAI Images (DALL·E), см. SPEC Блок 4"
     BookOfConsciousness:
       fields: [id, user_id, entries]
       note: "таймлайн трансформации — только append"
@@ -132,6 +137,9 @@ domain_graph:
     - "Session has_many Answer"
     - "Session belongs_to Layer"
     - "Answer contributes_to Card (через event-проекцию)"
+    - "Answer contributes_signal_to Card (cross-layer; через CardSignal)"
+    - "User has_many CardSignal"
+    - "CardSignal targets Card by card_type (агрегация веса перед card.computed)"
     - "Card aggregates_into AeonProfile"
     - "Session generates LlmCall"
     - "LlmCall produces next_question"
@@ -164,6 +172,13 @@ invariants:
       rule: "Session следующего слоя не открывается, пока предыдущий слой не имеет минимум MIN_ANSWERS_PER_LAYER ответов"
       enforcement: "Stability Engine"
 
+    - id: INV-09
+      rule: >
+        Card не назначается (card.computed), пока суммарный вес сигналов по card_type
+        < MIN_AGGREGATE_SIGNAL_WEIGHT_FOR_CARD — независимо от того, с каких слоёв пришли
+        сигналы; unlock слоя регулирует ход диалога, не заменяет порог сигналов
+      enforcement: "Stability Engine + агрегация CardSignal"
+
     - id: INV-06
       rule: "LlmCall сохраняется до выдачи ответа пользователю, не после"
       enforcement: "транзакция: write LlmCall → send message"
@@ -179,7 +194,7 @@ invariants:
   safety:
     - id: INV-S01
       rule: "При обнаружении кризисных маркеров (суицид, самоповреждение, насилие) бот прекращает профилирование и предлагает горячую линию"
-      enforcement: "safety classifier на каждом пользовательском input до LLM"
+      enforcement: "safety Gate 1 в stability/ на каждом пользовательском input до любого дорогого вызова; Gate 2 в system prompt LLM"
 
     - id: INV-S02
       rule: "Бот не даёт медицинских, юридических, финансовых советов — только рефлексивные вопросы и инсайты"
@@ -190,6 +205,12 @@ invariants:
 # ───────────────────────────────────────────────────────
 
 constants:
+  - key: MIN_AGGREGATE_SIGNAL_WEIGHT_FOR_CARD
+    value: 0.5
+    why: "черновой порог суммарного веса (шкала 0–1); калибровать до запуска MVP"
+    breaks_without: "карты без смысла или слишком рано; либо игнор сквозных связей"
+    calibration: "A/B с retention и качеством профиля; зафиксировать число в docs/constants.md"
+
   - key: CARD_CONFIDENCE_THRESHOLD
     value: 0.72
     why: "ниже — карта ненадёжна и вводит пользователя в заблуждение"
@@ -270,6 +291,11 @@ events:
       payload: [session_id, question_id, answer_value, answer_type]
       note: "НЕИЗМЕНЯЕМ после записи (INV-02)"
 
+    - type: card_signal.received
+      trigger: "ответ спроецирован на копилку сигналов целевой карты (сквозной routing)"
+      payload: [answer_id, user_id, card_type, weight, source_layer]
+      note: "может быть несколько на один answer.given; causation от answer.given"
+
     - type: llm.called
       trigger: "вызов Claude API"
       payload: [session_id, model, prompt_version, input_hash, latency_ms]
@@ -288,7 +314,7 @@ events:
       payload: [profile_version, cards_included, glyph_id]
 
     - type: safety.triggered
-      trigger: "safety classifier поймал кризисный маркер"
+      trigger: "safety Gate 1 (или реже Gate 2 / эскалация) поймал кризисный маркер"
       payload: [session_id, trigger_category, action_taken]
       note: "НЕ содержит оригинальный текст пользователя"
 
@@ -322,13 +348,20 @@ architecture:
       must_not: "знать о MAX, LLM, БД"
 
     stability_engine:
-      role: "лимиты, пороги уверенности, анти-абуз, safety"
+      role: "лимиты, пороги уверенности, анти-абуз, safety Gate 1"
       responsibilities:
         - "проверка DAILY_SESSION_LIMIT"
         - "проверка CARD_CONFIDENCE_THRESHOLD"
-        - "safety classifier (до LLM)"
+        - "safety Gate 1: rule-based / лёгкий классификатор ДО любого дорогого вызова (отдельные тесты)"
         - "rate limiter по user_id"
-      must: "быть отдельным модулем, не размазан по коду"
+      must: "быть отдельным модулем в src/stability/, не размазан по коду"
+
+    signal_classifier:
+      role: "шаг 1 пайплайна ответа: ответ → веса по card_type → card_signal.received"
+      responsibilities:
+        - "дешёвый: правила или малая модель, не обязательно LLM"
+        - "несколько card_signal.received на один answer при необходимости"
+      must_not: "блокировать p95 ответа тяжёлым LLM"
 
     dialog_engine:
       role: "адаптивный диалог, управление состоянием сессии"
@@ -339,15 +372,16 @@ architecture:
       must: "работать через events — каждый шаг = event"
 
     llm_client:
-      role: "вызовы Claude API, промпты, версионирование"
+      role: "вызовы Claude API (основной диалог), OpenAI (fallback), промпты"
       responsibilities:
-        - "системный промпт с контекстом пользователя"
+        - "системный промпт с контекстом пользователя + safety Gate 2 (границы в промпте)"
         - "версионирование prompt templates"
         - "логирование каждого вызова (LlmCall event)"
-        - "fallback при timeout"
+        - "fallback: OpenAI при недоступности Claude"
+        - "глиф: OpenAI Images (DALL·E), не смешивать с текстовым Claude без явного разделения"
 
     aeon_engine:
-      role: "вычисление карт, построение профиля, генерация глифа"
+      role: "вычисление карт, построение профиля; глиф через OpenAI Images"
       input: "только event store"
       output: "Card, AeonProfile, Glyph"
 
@@ -359,9 +393,11 @@ architecture:
     read_models:
       role: "проекции для быстрого чтения"
       models:
-        - "UserProfile (для отправки профиля пользователю)"
+        - "UserProfile (сжатый профиль: карты, confidence, архетип)"
+        - "CardSignalRollup (незакрытые сигналы по порогу)"
+        - "AnswerTail (последние 3–5 ответов для LLM)"
         - "SessionContext (текущее состояние сессии для LLM)"
-        - "BookOfConsciousness (таймлайн для пользователя)"
+        - "BookOfConsciousness (таймлайн; не в промпт LLM — UI и метрики)"
       rebuild: "из event store при необходимости"
 
   data_flow: |
@@ -371,29 +407,37 @@ architecture:
     [MAX Adapter] ──idempotency check──▶ skip if duplicate
         │
         ▼
-    [Stability Engine] ──safety check──▶ crisis: send hotline, stop
+    [Stability Engine] ──safety Gate 1──▶ crisis: send hotline, stop (без LLM)
         │           └──rate limit──▶ 429, stop
         ▼
-    [Dialog Engine]
-        │   reads SessionContext (read model)
+    [Dialog Engine] reads SessionContext + профиль + хвост + незакрытые CardSignal
         │
-        ├──▶ [LLM Client] ──▶ llm.called event ──▶ next question text
+        ├──▶ [Signal Classifier] ──▶ card_signal.received (дешёво)
+        │
+        ├──▶ [LLM Client Claude; Gate 2 в system prompt] ──▶ llm.called ──▶ next question
+        │         └── fallback OpenAI при сбое Claude
         │
         ▼
     answer.given event ──▶ [Event Core]
         │
-        ├──▶ [Aeon Engine] ──▶ card.computed event (if threshold met)
+        ├──▶ [Aeon Engine] ──▶ card.computed (порог сигналов + confidence)
         │
         └──▶ [MAX Adapter] ──▶ send message to user
 
   stack:
-    language: "Python 3.12 (asyncio)"
-    web: "FastAPI"
+    language: "TypeScript 5.x"
+    runtime: "Node.js 22 LTS"
+    web: "Fastify"
     database: "PostgreSQL 16"
     cache: "Redis 7 (сессии, rate limits)"
-    llm: "Anthropic Claude (claude-sonnet-4-6)"
+    llm:
+      primary: "Anthropic Claude API"
+      fallback: "OpenAI (текст)"
+      glyph_image: "OpenAI Images (DALL·E)"
+    share_render: "sharp + @resvg/resvg-js (SVG → PNG, без headless browser)"
+    migrations: "node-postgres + db-migrate | Drizzle ORM — уточнить при инициализации репо"
     containerization: "Docker + docker-compose"
-    testing: "pytest + hypothesis (property-based для инвариантов)"
+    testing: "Vitest + fast-check (property-based для инвариантов)"
     observability: "OpenTelemetry + Prometheus-совместимые метрики"
 
 # ───────────────────────────────────────────────────────
@@ -408,25 +452,27 @@ project_structure:
     - path: "src/events/"
       purpose: "event store, контракты, идемпотентность"
     - path: "src/stability/"
-      purpose: "Stability Engine: лимиты, safety, пороги"
+      purpose: "Stability Engine: лимиты, safety Gate 1, пороги (отдельные тесты на gate)"
     - path: "src/dialog/"
       purpose: "движок диалога, FSM слоёв, управление сессией"
+    - path: "src/signal_classifier/"
+      purpose: "дешёвый шаг: ответ → card_signal.received (правила или малая модель)"
     - path: "src/aeon/"
       purpose: "карты ÆON Map, профиль, глиф, Book of Consciousness"
     - path: "src/llm/"
-      purpose: "Claude клиент, prompt templates (версионированные)"
+      purpose: "Claude (основной), OpenAI fallback, DALL·E для глифа; prompt templates"
     - path: "src/integrations/max/"
       purpose: "MAX Bot API клиент, webhook handler"
     - path: "src/read_models/"
-      purpose: "проекции: SessionContext, UserProfile, BookOfConsciousness"
+      purpose: "проекции: SessionContext, UserProfile, CardSignalRollup, AnswerTail, BookOfConsciousness"
     - path: "src/api/"
       purpose: "HTTP endpoints, роутинг"
     - path: "tests/invariants/"
-      purpose: "property-based тесты на инварианты (pytest + hypothesis)"
+      purpose: "property-based тесты на инварианты (Vitest + fast-check)"
     - path: "tests/scenarios/"
       purpose: "end-to-end сценарные тесты диалогов"
     - path: "migrations/"
-      purpose: "SQL миграции (Alembic)"
+      purpose: "SQL миграции (db-migrate | Drizzle — по выбору при старте)"
     - path: "docs/"
       purpose: "спецификация: uncertainty-map, domain-graph, invariants, constants, events, architecture"
     - path: "prompts/"
@@ -436,6 +482,7 @@ project_structure:
 # СЛОИ ÆON MAP — РЕАЛИЗАЦИЯ
 # ───────────────────────────────────────────────────────
 
+# Unlock order — линейный; signal routing — сквозной (см. SPEC Блок 2, CardSignal, card_signal.received).
 aeon_layers:
   mvp:
     - id: I
@@ -479,6 +526,10 @@ aeon_layers:
 
 dialog:
   mode: "adaptive — следующий вопрос генерирует LLM с учётом всех предыдущих ответов"
+  branching: "без явных веток сценария — только адаптивный LLM по полному контексту"
+  prompts:
+    structure: "один общий system prompt + дополнения/шаблоны по слоям (I, II, IV MVP)"
+    note: "отклонения (не знаю, оффтоп, провокации) — в рамках этой структуры, не отдельные продуктовые ветки"
   fallback: "статичный список вопросов на случай LLM timeout"
   answer_formats:
     - type: buttons
@@ -504,6 +555,13 @@ dialog:
       - "не сравнивает с другими людьми"
 
   safety:
+    gates:
+      gate_1:
+        where: "src/stability/ — до любого дорогого вызова (Claude/OpenAI)"
+        how: "rule-based и/или лёгкий классификатор; отдельные тесты"
+      gate_2:
+        where: "system prompt основного LLM"
+        how: "границы и запреты; второй рубеж для edge cases"
     triggers:
       - "суицидальные высказывания"
       - "самоповреждение"
@@ -566,24 +624,110 @@ features:
     - "LLM-ядро генерирует следующий вопрос на основе всех предыдущих ответов"
     - "Stability Engine контролирует пороги перед назначением карты"
     - "ÆON-профиль строится как read model из event log"
-    - "Safety classifier работает до LLM на каждом сообщении"
+    - "Safety Gate 1 до любого дорогого вызова на каждом сообщении"
     - "Идемпотентность: дубли MAX-апдейтов игнорируются"
     - "Book of Consciousness: каждая завершённая сессия добавляет запись"
+    - "Конец сессии: msg1 глиф+фраза-суть → пауза 2–3 с → msg2 краткий профиль 3–4 блока текста (без HTML)"
+    - "Push MAX через 24 ч после завершённой сессии: персонализированный крючок по карте с напряжением"
 
   secondary:
-    - "Glyph: уникальный SVG-символ профиля (генерируется LLM)"
+    - "Glyph: уникальное изображение профиля (OpenAI Images / DALL·E)"
+    - "Шеринг: PNG-карточка (SVG → PNG sharp + @resvg/resvg-js): глиф + архетип + строка сути"
     - "Кнопки-ответы в MAX для закрытых вопросов"
     - "Напоминание о незавершённой сессии через 24 часа"
     - "Команда /profile — показать текущий профиль в любой момент"
     - "Команда /history — Book of Consciousness"
 
+  v1_addition:
+    - "Еженедельный глиф-дайджест: изменения профиля, накопление сигналов"
+    - "Публичная ссылка на веб-профиль (после Mini App или лендинга)"
+
   out_of_scope_mvp:
-    - "Веб-интерфейс / Mini App MAX"
+    - "Mini App / лендинг / публичная ссылка на профиль (см. v1_addition)"
     - "NFT-глифы и блокчейн"
     - "Совместимость с другими пользователями (Compatibility Map)"
     - "Экспорт профиля в PDF"
     - "API для коучей и HR"
     - "Мультиязычность (только RU в MVP)"
+
+profile_delivery:
+  end_session_messages:
+    delay_sec_between: [2, 3]
+    message_1: "глиф + одна фраза-суть (эмоциональная точка)"
+    message_2: "3–4 текстовых блока: архетип, когнитивный стиль, зона роста, энергия"
+  push_after_complete:
+    delay_hours: 24
+    template: "персонализировано: слой + карта с max напряжением"
+  share_card:
+    format: "PNG"
+    pipeline: "SVG template → PNG (sharp + @resvg/resvg-js)"
+    contains: [glyph, archetype_name, essence_one_liner]
+    no_external_urls: true
+
+max_platform:
+  mvp:
+    bot_account: "уже создан"
+    transport: "webhook only (long polling только dev-костыль)"
+    https: "обязателен; валидный TLS (не self-signed)"
+    domain: "стабильный; фиксированный IP не обязателен"
+    port_note: "443 | 80 | 88 | 8443 — уточнить в документации MAX Bot API"
+  ui: "только чат в MVP (Mini App — v1)"
+
+deploy:
+  production:
+    tls: "Let's Encrypt (Caddy или nginx)"
+    proxy: "Caddy как reverse proxy (рекомендовано для простоты)"
+    hosting_ru: ["Yandex Cloud", "VK Cloud", "Selectel"]
+  local_dev:
+    tunnel: "ngrok | cloudflared — HTTPS URL для регистрации webhook"
+    compose: "опционально отдельный сервис туннеля в docker-compose"
+
+business:
+  load:
+    mau_honest_start: "сотни"
+    mau_with_audience_channel: "тысячи"
+    single_node_estimate_mau: 5000
+    note: "один Node.js + PostgreSQL на одном сервере — до порядка ~5k MAU без горизонтального масштабирования (оценка)"
+  kubernetes_mvp: false
+  privacy:
+    level: "серьёзный продукт, GDPR-like"
+    automated_deletion: true
+    pii_separate_from_analytics: true
+    data_residency: "только РФ"
+  process:
+    team: "соло + Cursor agent"
+    repo: "открытый GitHub"
+    tracking: "GitHub Issues, Projects, Milestones, Labels"
+    issues_export: "docs/GITHUB_ISSUES.md"
+    git_strategy_doc: "docs/GIT_STRATEGY.md"
+
+git_strategy:
+  principle: "коммит когда стабильно и не хочется терять, не когда «всё идеально готово»"
+  commit_triggers:
+    - "функция + тест зелёный"
+    - "закрыт один acceptance criterion из issue"
+    - "перед рефакторингом рабочего кода — точка возврата"
+    - "конец дня — коммит с префиксом wip: если не закончил"
+  commits_per_day_active_solo: [5, 15]
+  branches_when:
+    long_running_feature: "feat/<name> — мерж когда итерация/фича закрыта"
+    experiment: "exp/<name> — можно выбросить"
+    otherwise: "прямо в main"
+  branches_project:
+    main: "всегда рабочее, задеплоено"
+    iteration: "feat/iter-N — например feat/iter-1 Event Core, feat/iter-2 Dialog Engine"
+  iteration_cycle: "закрыл итерацию → merge в main → удалил ветку → следующая feat/iter-"
+
+monetization:
+  mvp_model: "freemium + QIP Coin"
+  free_tier: "базовый профиль"
+  paid_qip: ["глубокие слои", "расширенный анализ"]
+  not_mvp:
+    pay_per_profile: "низкий барьер, хуже retention — не выбрано"
+    subscription: "нужна еженедельная ценность — в MVP ещё нет"
+  architecture:
+    principle: "платные действия = события; Stability Engine проверяет доступ; без обхода event log"
+    tbd: ["цены в QIP", "API кошелька QIP", "event types для списаний"]
 
 # ───────────────────────────────────────────────────────
 # ПРАВИЛА
@@ -592,7 +736,7 @@ features:
 rules:
   hard:
     - "НИКОГДА не писать UPDATE или DELETE в таблицу events — только INSERT"
-    - "НИКОГДА не пропускать safety check перед LLM-вызовом"
+    - "НИКОГДА не пропускать safety Gate 1 перед любым дорогим вызовом (LLM)"
     - "НИКОГДА не назначать Card без проверки CARD_CONFIDENCE_THRESHOLD"
     - "НИКОГДА не хранить оригинальный текст пользователя в safety.triggered event"
     - "НИКОГДА не строить профиль вне aeon_engine — только из event store"
@@ -603,7 +747,7 @@ rules:
     - "Каждый LLM-вызов фиксируется в llm.called event ДО отправки ответа пользователю"
     - "Константы — в конфиге, не в коде"
     - "Prompt templates — версионированные файлы в /prompts, не строки в коде"
-    - "Property-based тесты на все инварианты (pytest + hypothesis)"
+    - "Property-based тесты на все инварианты (Vitest + fast-check)"
     - "Webhook handler возвращает 200 немедленно, обработка — async"
 
   soft:
@@ -676,12 +820,12 @@ iterations:
     done_when: "все метрики видны, INV-алерт срабатывает на тест-нарушение"
 
   - id: 7
-    name: "Safety + Glyph"
+    name: "Safety + Glyph + share card"
     deliverables:
-      - "safety classifier (до LLM)"
-      - "safety.triggered flow с редиректом"
-      - "генерация Glyph через LLM"
-    done_when: "кризисное сообщение останавливает профилирование, глиф генерируется"
+      - "safety Gate 1 в stability/ (тесты), safety.triggered; Gate 2 в system prompt"
+      - "генерация Glyph: OpenAI Images (DALL·E)"
+      - "PNG share card: sharp + @resvg/resvg-js"
+    done_when: "кризисное сообщение останавливает профилирование без дорогого LLM; глиф и шеринг-карточка генерируются"
 
 # ───────────────────────────────────────────────────────
 # КРИТЕРИИ ПРИЁМКИ

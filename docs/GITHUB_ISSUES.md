@@ -1,0 +1,245 @@
+# GitHub Issues — ÆON Map MAX Bot (черновики)
+
+Скопируй в GitHub: для каждой итерации создай **Milestone** с именем из колонки «Milestone», затем **Issue** с телом ниже. Labels создай один раз (раздел в конце).
+
+Источник: `aeon-max-bot.vibepp.yaml` → `iterations`, плюс SPEC.
+
+**Git:** частота коммитов, ветки `feat/iter-N`, `main` — см. `GIT_STRATEGY.md`.
+
+---
+
+## Метки (Labels)
+
+Создай в репозитории:
+
+| Label | Цвет (пример) | Смысл |
+|-------|----------------|--------|
+| `iteration` | — | группа (или используй префиксы ниже) |
+| `iteration-0` … `iteration-7` | `#0E8A16` | привязка к итерации |
+| `mvp` | `#D93F0B` | в скоупе MVP |
+| `area/infrastructure` | `#1D76DB` | репо, docker, деплой |
+| `area/max` | `#5319E7` | MAX Bot API, webhook |
+| `area/events` | `#FBCA04` | event store, идемпотентность |
+| `area/dialog` | `#C5DEF5` | dialog engine, сессии |
+| `area/llm` | `#BFDADC` | Claude, OpenAI, промпты |
+| `area/aeon` | `#D4C5F9` | карты, профиль, сигналы |
+| `area/stability` | `#FF7619` | лимиты, safety Gate 1 |
+| `area/observability` | `#F9D0C4` | метрики, алерты, Grafana |
+| `priority/p0` | `#B60205` | блокирует следующую итерацию |
+
+**Milestones (8 штук):**
+
+1. `Iteration 0 — Скелет`
+2. `Iteration 1 — Event Core`
+3. `Iteration 2 — Первый вопрос`
+4. `Iteration 3 — LLM-диалог`
+5. `Iteration 4 — Первая карта`
+6. `Iteration 5 — MVP профиль`
+7. `Iteration 6 — Наблюдаемость`
+8. `Iteration 7 — Safety + Glyph + share card`
+
+---
+
+## Issue 1
+
+**Title:** `[Iter 0] Скелет репо, docker-compose, webhook «привет», таблица events`
+
+**Milestone:** `Iteration 0 — Скелет`
+
+**Labels:** `iteration-0`, `mvp`, `area/infrastructure`, `area/max`, `area/events`, `priority/p0`
+
+**Description:**
+
+Стартовая вертикаль: репозиторий на **TypeScript / Node 22**, **Fastify**, **PostgreSQL + Redis** в **docker-compose**, минимальный **MAX webhook** → ответ пользователю «привет», первая миграция с таблицей **events** (append-only контракт на будущее).
+
+**Deliverables:**
+
+- Репо со скриптами `dev` / `build` / `test` (Vitest подключить можно минимально).
+- `docker-compose`: Postgres, Redis, app-сервис.
+- Webhook endpoint: валидация входа MAX (как в доке), **идемпотентность** заготовка под iter 1.
+- Миграция: таблица `events` (минимум полей по контракту vibepp или упрощённо с пометкой расширить в iter 1).
+
+**Acceptance criteria:**
+
+- [ ] Пользователь пишет боту в MAX — приходит ответ «привет» (или эквивалент из SPEC).
+- [ ] В БД есть возможность записать событие (хотя бы ручной insert или код записи `user.started`).
+- [ ] `docker compose up` поднимает стек без ручных шагов (кроме `.env`).
+
+**Связь с SPEC:** Блок 6 (webhook), «Решения по стеку».
+
+---
+
+## Issue 2
+
+**Title:** `[Iter 1] Event Core: append-only, контракт события, идемпотентность по max_update_id`
+
+**Milestone:** `Iteration 1 — Event Core`
+
+**Labels:** `iteration-1`, `mvp`, `area/events`, `area/max`, `priority/p0`
+
+**Description:**
+
+Event store только **INSERT**, контракт полей как в `events.contract` (vibepp). **Идемпотентность:** повторный MAX update с тем же `update_id` не создаёт второе событие.
+
+**Deliverables:**
+
+- Реализация записи событий с `idempotency_key` / `max_update_id`.
+- `user.started` при первом `/start` (или эквивалент входа в MAX).
+
+**Acceptance criteria:**
+
+- [ ] Дубль webhook payload с тем же идентификатором update **не** дублирует событие (тест или сценарий).
+- [ ] События не удаляются и не обновляются (инвариант hard rules).
+
+---
+
+## Issue 3
+
+**Title:** `[Iter 2] Диалог: session.opened, статичный первый вопрос Core, answer.given`
+
+**Milestone:** `Iteration 2 — Первый вопрос`
+
+**Labels:** `iteration-2`, `mvp`, `area/dialog`, `area/events`, `priority/p0`
+
+**Description:**
+
+Открытие сессии, один **статичный** первый вопрос Core Layer, сохранение ответа как неизменяемого `answer.given`.
+
+**Deliverables:**
+
+- `session.opened`, `question.asked`, `answer.given` в логе.
+- Минимальный SessionContext / read model для следующего шага.
+
+**Acceptance criteria:**
+
+- [ ] Пользователь отвечает на вопрос — в event store есть цепочка событий сессии.
+- [ ] Ответ нельзя «перезаписать» без нового события (политика INV-02).
+
+---
+
+## Issue 4
+
+**Title:** `[Iter 3] LLM-диалог: Claude, адаптивный следующий вопрос, llm.called, fallback OpenAI`
+
+**Milestone:** `Iteration 3 — LLM-диалог`
+
+**Labels:** `iteration-3`, `mvp`, `area/llm`, `area/dialog`, `area/events`, `priority/p0`
+
+**Description:**
+
+Интеграция **Anthropic Claude**; следующий вопрос генерируется с учётом предыдущих ответов; **`llm.called`** с версией промпта; при таймауте/ошибке — **fallback OpenAI** (как в SPEC). Опционально на этом шаге: заготовка **signal classifier** (если не выносить в отдельный PR) — не блокер, если отложено до iter 4–5 с отдельной задачей.
+
+**Deliverables:**
+
+- Клиент Claude + конфиг моделей.
+- Версионированные промпты в `/prompts`.
+- Fallback-путь и метрика `llm_timeout_rate`.
+
+**Acceptance criteria:**
+
+- [ ] Минимум **5** последовательных обменов, каждый новый вопрос учитывает предыдущие ответы (ручная проверка + лог).
+- [ ] Каждый успешный вызов LLM даёт `llm.called` до отправки сообщения пользователю.
+
+---
+
+## Issue 5
+
+**Title:** `[Iter 4] Первая карта: Stability Engine, CognitiveIdentityMap, card.computed, INV тесты`
+
+**Milestone:** `Iteration 4 — Первая карта`
+
+**Labels:** `iteration-4`, `mvp`, `area/aeon`, `area/stability`, `priority/p0`
+
+**Description:**
+
+**Stability Engine** проверяет **CARD_CONFIDENCE_THRESHOLD**; первая карта **CognitiveIdentityMap**; событие **`card.computed`**. **CardSignal** / сквозные сигналы — если ещё не введены, зафиксировать минимальный путь согласно SPEC Блок 2. **Vitest + fast-check** для INV-03, INV-04 (и релевантных).
+
+**Acceptance criteria:**
+
+- [ ] Карта не назначается при confidence ниже порога.
+- [ ] Инварианты покрыты property-based тестами (минимум заявленные в задаче).
+
+---
+
+## Issue 6
+
+**Title:** `[Iter 5] MVP профиль: слои I+II+IV, AeonProfile, /profile, Book of Consciousness`
+
+**Milestone:** `Iteration 5 — MVP профиль`
+
+**Labels:** `iteration-5`, `mvp`, `area/aeon`, `area/dialog`, `area/max`, `priority/p0`
+
+**Description:**
+
+Полная сессия по слоям MVP; **AeonProfile** как read model; команда **`/profile`**; **`session.completed`** → запись в **Book of Consciousness**. Выдача финала двумя сообщениями (пауза) — по SPEC Блок 5.
+
+**Acceptance criteria:**
+
+- [ ] Пользователь проходит сессию и получает профиль в чате.
+- [ ] `/profile` отдаёт согласованный текст профиля.
+- [ ] Book of Consciousness пополняется событием завершения.
+
+---
+
+## Issue 7
+
+**Title:** `[Iter 6] Наблюдаемость: метрики, алерты, Grafana (или аналог)`
+
+**Milestone:** `Iteration 6 — Наблюдаемость`
+
+**Labels:** `iteration-6`, `mvp`, `area/observability`, `priority/p0`
+
+**Description:**
+
+Реализовать дашборды из vibepp `observability.dashboards`, алерты из `observability.alerts`, визуализация в Grafana или эквиваленте.
+
+**Acceptance criteria:**
+
+- [ ] Видны метрики: latency, completion, invariant violations, safety rate, webhook duplicates.
+- [ ] Тестовый триггер нарушения инварианта поднимает алерт (в dev/staging).
+
+---
+
+## Issue 8
+
+**Title:** `[Iter 7] Safety Gate 1 + Gate 2, Glyph DALL·E, PNG share card (sharp/resvg)`
+
+**Milestone:** `Iteration 7 — Safety + Glyph + share card`
+
+**Labels:** `iteration-7`, `mvp`, `area/stability`, `area/llm`, `area/aeon`, `area/max`, `priority/p0`
+
+**Description:**
+
+- **Gate 1** в `src/stability/`: rule-based / лёгкий классификатор **до** дорогих вызовов; тесты отдельно.
+- **Gate 2**: границы в system prompt основного LLM.
+- **`safety.triggered`** без хранения сырого текста пользователя.
+- **Glyph:** OpenAI Images (**DALL·E**).
+- **Share card:** SVG → PNG через **sharp** + **@resvg/resvg-js**, отправка в MAX как медиа.
+
+**Acceptance criteria:**
+
+- [ ] Кризисный ввод не вызывает Claude/OpenAI fallback для диалога (остановка по Gate 1).
+- [ ] Глиф генерируется и показывается пользователю.
+- [ ] PNG-карточка для шеринга собирается на бэке и отправляется.
+
+---
+
+## Бэклог (после закрытия итерации 0–7)
+
+**Title:** `[Backlog] Freemium QIP: события биллинга, проверка баланса в Stability Engine`
+
+**Milestone:** _(нет или «Post-MVP»)_
+
+**Labels:** `area/aeon`, `area/stability`, `area/events`
+
+**Description:**
+
+Реализация **Блок 9 SPEC**: списания QIP, разблокировка платных слоёв/анализа, события домена, интеграция с API кошелька QIP — после готовности контракта с платформой QIP.
+
+**Acceptance criteria:** _(заполнить при появлении API QIP)._
+
+---
+
+## Как вести PR
+
+В описании PR: `Closes #N` — номер соответствующего issue. Для крупных итераций допустимы под-issues (sub-task), но **milestone** остаётся общим для всей итерации.
