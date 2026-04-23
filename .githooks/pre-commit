@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+# Переносимый pre-commit: подключение — см. docs/GIT_HOOKS.md
+set -e
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT" || exit 1
+
+if command -v node >/dev/null 2>&1; then
+  node scripts/check-spec.mjs
+  node scripts/check-git-policy.mjs
+else
+  echo "pre-commit: node не найден, пропуск check-spec / check-git-policy" >&2
+fi

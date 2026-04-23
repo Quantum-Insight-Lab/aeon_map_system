@@ -1,7 +1,7 @@
 # SPEC — ÆON Map System (MAX-бот)
 
 **Статус:** **Этап 1 закрыт** — блоки **1–9** + PDA-артефакты в `docs/*.md` (см. ниже). Этап 2 (разработка) — по `GITHUB_ISSUES.md`, ветка `feat/iter-0`.  
-**Источники:** `CURSOR_PROMPT_MAX_BOT.md`, `aeon-max-bot.vibepp.yaml`, `GITHUB_ISSUES.md`, `GIT_STRATEGY.md`, `SPEC_SUMMARY.md`.  
+**Источники:** `CURSOR_PROMPT_MAX_BOT.md`, `aeon-max-bot.vibepp.yaml`, `GITHUB_ISSUES.md`, `GIT_STRATEGY.md`, `GIT_HOOKS.md`, `SPEC_SUMMARY.md`.  
 **Правило:** продуктовые решения — в этом файле; формальные PDA-артефакты — в отдельных `.md` с отсылкой к vibepp.
 
 ### Артефакты Этапа 1 (чеклист `CURSOR_PROMPT_MAX_BOT.md`)
@@ -18,6 +18,7 @@
 | `architecture.md` | Слои, поток данных, стек |
 | `observability.md` | Метрики и алерты |
 | `roadmap.md` | MVP → v1 → v2, оценки недель |
+| `GIT_HOOKS.md` | Pre-commit, Cursor hooks, политика веток |
 
 **Машинный канон:** при расхождении формулировок приоритет уточнения — `aeon-max-bot.vibepp.yaml`, затем синхронизация `.md`.
 

@@ -4,7 +4,7 @@
 
 Источник: `aeon-max-bot.vibepp.yaml` → `iterations`, плюс SPEC.
 
-**Git:** частота коммитов, ветки `feat/iter-N`, `main` — см. `GIT_STRATEGY.md`.
+**Git:** частота коммитов, ветки `feat/iter-N`, `main` — `GIT_STRATEGY.md`; pre-commit и Cursor — `GIT_HOOKS.md`.
 
 ---
 

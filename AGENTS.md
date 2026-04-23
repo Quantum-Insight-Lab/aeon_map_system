@@ -9,7 +9,7 @@
 3. **Стоп-правило:** при неопределённости / конфликте / отсутствии инварианта / отсутствии issue / отсутствии ветки итерации — **остановись, задай 1–3 вопроса, обнови артефакты, дождись подтверждения**, только потом код.
 4. **Жёсткие инварианты:** `vibepp.yaml → rules.hard`. Это hard-constraints.
 5. **Git:** `main` = рабочее/деплой; итерации — `feat/iter-N`; эксперименты — `exp/<name>`; коммитить часто, по триггерам из `GIT_STRATEGY.md`.
-6. **Валидатор:** `node scripts/check-spec.mjs` — запускать при правках `SPEC.md` / `vibepp.yaml` / `GITHUB_ISSUES.md`.
+6. **Валидаторы:** `node scripts/check-spec.mjs`, `node scripts/check-git-policy.mjs` — см. `docs/GIT_HOOKS.md` (подключение `.githooks`, Cursor hooks).
 
 ## Секреты
 
