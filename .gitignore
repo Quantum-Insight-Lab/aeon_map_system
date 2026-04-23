@@ -1,0 +1,33 @@
+# Секреты и окружения
+.env
+.env.*
+!.env.example
+
+# Node / TS
+node_modules/
+dist/
+build/
+.tsbuildinfo
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Тест-артефакты
+coverage/
+.vitest/
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Локальные заметки, не для публичного репо
+NOTES.local.md
+docs/private/
+scratch/
+
+# Docker volumes и локальные БД
+pgdata/
+redis-data/

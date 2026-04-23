@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/spec-check.sh",
+        "matcher": "git\\s+(commit|push)\\b",
+        "timeout": 20
+      }
+    ]
+  }
+}
