@@ -4,7 +4,7 @@
 
 | Что | Когда срабатывает | Назначение |
 |-----|-------------------|------------|
-| **`scripts/check-spec.mjs`** | Вручную, в pre-commit, в Cursor hook | SPEC ↔ vibepp ↔ GITHUB_ISSUES |
+| **`scripts/check-spec.mjs`** | Вручную, в pre-commit, в Cursor hook | `docs/SPEC/SPEC.md` ↔ vibepp ↔ GITHUB_ISSUES |
 | **`scripts/check-git-policy.mjs`** | Вручную, в pre-commit, в Cursor hook | Ветка vs изменения кода (`GIT_STRATEGY.md`) |
 | **`.cursor/hooks/spec-check.sh`** | Только в Cursor перед `git commit` / `git push` | Остановить агента и спросить пользователя |
 

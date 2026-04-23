@@ -8,9 +8,9 @@ alwaysApply: true
 **Алгоритм исполнения:** `docs/aeon-max-bot.vibepp.yaml` (ключи `iterations`, `invariants`, `constants`, `events`, `architecture`, `dialog`, `monetization`, `aeon_layers`, `max_platform`).
 
 **Источники правды (читать по мере нужды, не копировать целиком):**
-- `docs/SPEC.md` — продуктовые решения по 9 блокам
+- `docs/SPEC/SPEC.md` — продуктовые решения по 9 блокам
 - `docs/SPEC_SUMMARY.md` — одностраничное саммари
-- PDA-артефакты: `uncertainty-map.md`, `domain-graph.md`, `invariants.md`, `constants.md`, `events.md`, `architecture.md`, `observability.md`, `roadmap.md` (все в `docs/`)
+- PDA-артефакты: `docs/SPEC/*.md` (uncertainty-map, domain-graph, invariants, constants, events, architecture, observability, roadmap)
 - `docs/CURSOR_PROMPT_MAX_BOT.md` — исходные требования и формат артефактов
 - `docs/GITHUB_ISSUES.md` — задачи и acceptance criteria по итерациям
 - `docs/GIT_STRATEGY.md` — коммиты/ветки
@@ -21,7 +21,7 @@ alwaysApply: true
 Останови работу и задай 1–3 точных вопроса, если:
 
 - требование неясно или есть два толкования;
-- конфликт между `SPEC.md` ↔ `vibepp.yaml` или внутри одного файла;
+- конфликт между `docs/SPEC/SPEC.md` ↔ `vibepp.yaml` или внутри одного файла;
 - нет инварианта/константы/`event_type` под действие;
 - нет issue / acceptance criteria под шаг;
 - нет ветки `feat/iter-N` под текущую итерацию;
@@ -45,7 +45,7 @@ alwaysApply: true
 
 ## Проверка синхронизации
 
-Перед коммитом, если менялись `SPEC.md` / `vibepp.yaml` / `GITHUB_ISSUES.md`, запусти `node scripts/check-spec.mjs`. Красный отчёт не игнорировать.
+Перед коммитом, если менялись `docs/SPEC/**` / `vibepp.yaml` / `GITHUB_ISSUES.md`, запусти `node scripts/check-spec.mjs`. Красный отчёт не игнорировать.
 
 ## Где спрашивать, где действовать
 

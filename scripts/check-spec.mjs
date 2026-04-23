@@ -9,11 +9,12 @@ import { resolve } from "node:path";
 const ROOT = resolve(new URL("..", import.meta.url).pathname);
 
 const FILES = {
-  spec: resolve(ROOT, "docs/SPEC.md"),
+  spec: resolve(ROOT, "docs/SPEC/SPEC.md"),
   vibepp: resolve(ROOT, "docs/aeon-max-bot.vibepp.yaml"),
   issues: resolve(ROOT, "docs/GITHUB_ISSUES.md"),
   prompt: resolve(ROOT, "docs/CURSOR_PROMPT_MAX_BOT.md"),
   git: resolve(ROOT, "docs/GIT_STRATEGY.md"),
+  hooks: resolve(ROOT, "docs/GIT_HOOKS.md"),
 };
 
 const red = (s) => `\x1b[31m${s}\x1b[0m`;
@@ -43,7 +44,7 @@ for (const inv of invSet) {
   const inSpec = spec.includes(inv);
   const testsGlob = existsSync(resolve(ROOT, "tests"));
   if (!inSpec && !testsGlob) {
-    warnings.push(`Инвариант ${inv} есть в vibepp, но не упомянут в SPEC.md и нет tests/ (ожидаемо до iter-1).`);
+    warnings.push(`Инвариант ${inv} есть в vibepp, но не упомянут в docs/SPEC/SPEC.md и нет tests/ (ожидаемо до iter-1).`);
   }
 }
 
@@ -52,7 +53,7 @@ const eventTypes = [...vibepp.matchAll(/^\s*-\s*type:\s*([a-z_][\w]*\.[a-z_][\w.
 const eventSet = new Set(eventTypes);
 for (const ev of eventSet) {
   if (!spec.includes(ev) && !issues.includes(ev)) {
-    warnings.push(`event_type "${ev}" не упомянут ни в SPEC.md, ни в GITHUB_ISSUES.md.`);
+    warnings.push(`event_type "${ev}" не упомянут ни в docs/SPEC/SPEC.md, ни в GITHUB_ISSUES.md.`);
   }
 }
 
@@ -74,7 +75,7 @@ const stackChecks = [
 ];
 for (const [label, re] of stackChecks) {
   if (!re.test(spec) || !re.test(vibepp)) {
-    warnings.push(`Стек "${label}" не упомянут в обоих SPEC.md и vibepp.yaml.`);
+    warnings.push(`Стек "${label}" не упомянут в обоих docs/SPEC/SPEC.md и vibepp.yaml.`);
   }
 }
 
@@ -84,7 +85,7 @@ const secretPatterns = [
   /sk-ant-[a-zA-Z0-9-_]{20,}/g, // Anthropic-like
   /AIza[0-9A-Za-z-_]{35}/g, // Google API key
 ];
-for (const file of [FILES.spec, FILES.vibepp, FILES.issues, FILES.prompt, FILES.git]) {
+for (const file of [FILES.spec, FILES.vibepp, FILES.issues, FILES.prompt, FILES.git, FILES.hooks]) {
   const content = read(file);
   for (const re of secretPatterns) {
     if (re.test(content)) {
@@ -93,12 +94,27 @@ for (const file of [FILES.spec, FILES.vibepp, FILES.issues, FILES.prompt, FILES.
   }
 }
 
-// 6. Ссылки из SPEC на несуществующие файлы docs/*
-const linkedDocs = [...spec.matchAll(/`([A-Z][A-Z0-9_]*\.md)`/g)].map((m) => m[1]);
+// 6. Ссылки из SPEC на несуществующие файлы (`Xxx.md` в обратных кавычках)
+function resolveLinkedDoc(doc) {
+  const specSubdir = new Set([
+    "SPEC.md",
+    "uncertainty-map.md",
+    "domain-graph.md",
+    "invariants.md",
+    "constants.md",
+    "events.md",
+    "architecture.md",
+    "observability.md",
+    "roadmap.md",
+  ]);
+  if (specSubdir.has(doc)) return resolve(ROOT, "docs/SPEC", doc);
+  return resolve(ROOT, "docs", doc);
+}
+const linkedDocs = [...spec.matchAll(/`([A-Za-z][A-Za-z0-9_-]*\.md)`/g)].map((m) => m[1]);
 for (const doc of new Set(linkedDocs)) {
-  const p = resolve(ROOT, "docs", doc);
+  const p = resolveLinkedDoc(doc);
   if (!existsSync(p)) {
-    warnings.push(`SPEC.md ссылается на docs/${doc}, которого нет.`);
+    warnings.push(`docs/SPEC/SPEC.md ссылается на \`${doc}\`, файл не найден: ${p}`);
   }
 }
 

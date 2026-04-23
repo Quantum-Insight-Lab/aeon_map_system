@@ -474,7 +474,7 @@ project_structure:
     - path: "migrations/"
       purpose: "SQL миграции (db-migrate | Drizzle — по выбору при старте)"
     - path: "docs/"
-      purpose: "SPEC, SPEC_SUMMARY, uncertainty-map, domain-graph, invariants, constants, events, architecture, observability, roadmap, GITHUB_ISSUES, GIT_STRATEGY"
+      purpose: "SPEC/SPEC.md + PDA-артефакты; SPEC_SUMMARY; aeon-max-bot.vibepp.yaml; GITHUB_ISSUES; GIT_STRATEGY; GIT_HOOKS; CURSOR_PROMPT"
     - path: "prompts/"
       purpose: "версионированные prompt templates для LLM"
 

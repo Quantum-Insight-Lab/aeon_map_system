@@ -1,24 +1,24 @@
 # SPEC — ÆON Map System (MAX-бот)
 
-**Статус:** **Этап 1 закрыт** — блоки **1–9** + PDA-артефакты в `docs/*.md` (см. ниже). Этап 2 (разработка) — по `GITHUB_ISSUES.md`, ветка `feat/iter-0`.  
-**Источники:** `CURSOR_PROMPT_MAX_BOT.md`, `aeon-max-bot.vibepp.yaml`, `GITHUB_ISSUES.md`, `GIT_STRATEGY.md`, `GIT_HOOKS.md`, `SPEC_SUMMARY.md`.  
+**Статус:** **Этап 1 закрыт** — блоки **1–9** + PDA-артефакты в каталоге **`docs/SPEC/`** (см. ниже). Этап 2 (разработка) — по `GITHUB_ISSUES.md`, ветка `feat/iter-0`.  
+**Источники:** `CURSOR_PROMPT_MAX_BOT.md`, `aeon-max-bot.vibepp.yaml`, `GITHUB_ISSUES.md`, `GIT_STRATEGY.md`, `GIT_HOOKS.md`, `SPEC_SUMMARY.md` (в `docs/`).  
 **Правило:** продуктовые решения — в этом файле; формальные PDA-артефакты — в отдельных `.md` с отсылкой к vibepp.
 
 ### Артефакты Этапа 1 (чеклист `CURSOR_PROMPT_MAX_BOT.md`)
 
-| Файл | Назначение |
+| Путь | Назначение |
 |------|------------|
-| `SPEC.md` | Блоки 1–9, продукт и стек |
-| `SPEC_SUMMARY.md` | Одна страница для ревью перед кодом |
-| `uncertainty-map.md` | Карта неопределённости (15–30 пунктов) |
-| `domain-graph.md` | Сущности и рёбра «A [глагол] B» |
-| `invariants.md` | Инварианты и обеспечение |
-| `constants.md` | Пороги и лимиты |
-| `events.md` | Каталог событий и causation |
-| `architecture.md` | Слои, поток данных, стек |
-| `observability.md` | Метрики и алерты |
-| `roadmap.md` | MVP → v1 → v2, оценки недель |
-| `GIT_HOOKS.md` | Pre-commit, Cursor hooks, политика веток |
+| `docs/SPEC/SPEC.md` | Блоки 1–9, продукт и стек (этот файл) |
+| `docs/SPEC_SUMMARY.md` | Одна страница для ревью перед кодом |
+| `docs/SPEC/uncertainty-map.md` | Карта неопределённости (15–30 пунктов) |
+| `docs/SPEC/domain-graph.md` | Сущности и рёбра «A [глагол] B» |
+| `docs/SPEC/invariants.md` | Инварианты и обеспечение |
+| `docs/SPEC/constants.md` | Пороги и лимиты |
+| `docs/SPEC/events.md` | Каталог событий и causation |
+| `docs/SPEC/architecture.md` | Слои, поток данных, стек |
+| `docs/SPEC/observability.md` | Метрики и алерты |
+| `docs/SPEC/roadmap.md` | MVP → v1 → v2, оценки недель |
+| `docs/GIT_HOOKS.md` | Pre-commit, Cursor hooks, политика веток |
 
 **Машинный канон:** при расхождении формулировок приоритет уточнения — `aeon-max-bot.vibepp.yaml`, затем синхронизация `.md`.
 
