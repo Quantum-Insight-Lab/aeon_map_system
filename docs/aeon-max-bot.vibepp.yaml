@@ -474,7 +474,7 @@ project_structure:
     - path: "migrations/"
       purpose: "SQL миграции (db-migrate | Drizzle — по выбору при старте)"
     - path: "docs/"
-      purpose: "спецификация: uncertainty-map, domain-graph, invariants, constants, events, architecture"
+      purpose: "SPEC, SPEC_SUMMARY, uncertainty-map, domain-graph, invariants, constants, events, architecture, observability, roadmap, GITHUB_ISSUES, GIT_STRATEGY"
     - path: "prompts/"
       purpose: "версионированные prompt templates для LLM"
 

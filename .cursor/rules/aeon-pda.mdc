@@ -9,6 +9,8 @@ alwaysApply: true
 
 **Источники правды (читать по мере нужды, не копировать целиком):**
 - `docs/SPEC.md` — продуктовые решения по 9 блокам
+- `docs/SPEC_SUMMARY.md` — одностраничное саммари
+- PDA-артефакты: `uncertainty-map.md`, `domain-graph.md`, `invariants.md`, `constants.md`, `events.md`, `architecture.md`, `observability.md`, `roadmap.md` (все в `docs/`)
 - `docs/CURSOR_PROMPT_MAX_BOT.md` — исходные требования и формат артефактов
 - `docs/GITHUB_ISSUES.md` — задачи и acceptance criteria по итерациям
 - `docs/GIT_STRATEGY.md` — коммиты/ветки
