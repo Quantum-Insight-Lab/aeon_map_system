@@ -20,6 +20,7 @@ coverage/
 # IDE / OS
 .DS_Store
 Thumbs.db
+*:Zone.Identifier
 .vscode/
 .idea/
 

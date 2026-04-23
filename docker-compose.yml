@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aeon
+      POSTGRES_PASSWORD: aeon
+      POSTGRES_DB: aeon
+    # 5433 на хосте — чтобы не конфликтовать с локальным PostgreSQL на :5432
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aeon -d aeon"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 25s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://aeon:aeon@postgres:5432/aeon
+      REDIS_URL: redis://redis:6379
+      PORT: "3000"
+      LOG_LEVEL: info
+      MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:-}
+      MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET:-}
+      MAX_API_BASE_URL: ${MAX_API_BASE_URL:-https://platform-api.max.ru}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:

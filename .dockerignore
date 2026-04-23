@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.env
+.env.*
+coverage
+*.md
+marketing
+.cursor
+tests
