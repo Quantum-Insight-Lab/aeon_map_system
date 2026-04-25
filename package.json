@@ -1,0 +1,31 @@
+{
+  "name": "aeon-max-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node --env-file=.env ./node_modules/tsx/dist/cli.mjs watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "start:local": "node --env-file=.env dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "max:subscribe": "node --env-file=.env scripts/register-max-subscription.mjs",
+    "max:subscriptions": "node --env-file=.env scripts/register-max-subscription.mjs --status"
+  },
+  "dependencies": {
+    "fastify": "^5.2.1",
+    "pg": "^8.14.1",
+    "redis": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@types/pg": "^8.11.11",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1"
+  }
+}
