@@ -25,6 +25,14 @@
 
 **Идемпотентность `user.started` (iter 1, вариант B):** ключ строки в БД — `idempotency_key = user.started:${max_user_id}`. Повторная доставка того же или другого update для уже известного пользователя не создаёт вторую строку `user.started`. В `payload` события допускается поле `max_update_id` для связи с конкретным вебхуком.
 
+### Диалог iter-2 (первый статичный вопрос Core)
+
+- **`correlation_id`** для `session.opened`, `question.asked`, `answer.given` одной сессии: строка **`session_id`** (UUID v7).
+- В **`payload`** этих событий всегда есть **`max_user_id`** (число), чтобы выбирать цепочку по пользователю без отдельной таблицы сессий.
+- **`session.opened` (iter-2):** `idempotency_key = session.opened:iter2:${max_user_id}` — одна такая сессия на пользователя в рамках iter-2. В payload опционально **`opening_message_mid`**: `message.body.mid` того `message_created`, после которого открыли сессию (если вход через текст пользователя). Нужен, чтобы **повторный вебхук с тем же mid** не записывался как `answer.given`. Для входа через **`bot_started`** поле не задаётся.
+- **`question.asked` (первый вопрос Core):** `question_id = core:first`, `idempotency_key = question.asked:iter2:core:first:${max_user_id}`, в payload **`llm_call_id: null`**, текст вопроса из конфига приложения (`FIRST_CORE_QUESTION_TEXT` / дефолт в `config.ts`).
+- **`answer.given`:** `idempotency_key = answer.given:${max_update_id}` (см. INV-07). В payload: **`max_update_id`**, **`max_user_id`**, **`answer_type`** (iter-2: `text`), **`answer_value`** — текст ответа.
+
 ---
 
 ## Каталог `event_type`
@@ -32,9 +40,9 @@
 | type | Триггер | payload (поля) | causation / примечание |
 |------|---------|----------------|------------------------|
 | **user.started** | Первый вход /start в MAX | max_user_id, locale, referral_source | — |
-| **session.opened** | Бот открыл сессию | session_id, layer, question_count_plan | после user.started или логики возврата |
-| **question.asked** | Бот отправил вопрос | session_id, question_id, question_text, layer, llm_call_id | может следовать за llm.called |
-| **answer.given** | Пользователь ответил | session_id, question_id, answer_value, answer_type | **неизменяем**; causation для card_signal.received |
+| **session.opened** | Бот открыл сессию | session_id, layer, question_count_plan; iter-2: max_user_id, опц. opening_message_mid | после user.started или логики возврата |
+| **question.asked** | Бот отправил вопрос | session_id, question_id, question_text, layer, llm_call_id; iter-2: max_user_id | может следовать за llm.called |
+| **answer.given** | Пользователь ответил | session_id, question_id, answer_value, answer_type; iter-2: max_user_id, max_update_id | **неизменяем**; causation для card_signal.received |
 | **card_signal.received** | Классификатор сигналов | answer_id, user_id, card_type, weight, source_layer | несколько на один answer.given |
 | **llm.called** | Вызов Claude/OpenAI | session_id, model, prompt_version, input_hash, latency_ms | до отправки сообщения пользователю (INV-06) |
 | **card.computed** | Stability Engine назначил карту | card_type, confidence, input_answer_ids, version | после порогов сигналов + confidence |
