@@ -33,6 +33,15 @@
 - **`question.asked` (первый вопрос Core):** `question_id = core:first`, `idempotency_key = question.asked:iter2:core:first:${max_user_id}`, в payload **`llm_call_id: null`**, текст вопроса из конфига приложения (`FIRST_CORE_QUESTION_TEXT` / дефолт в `config.ts`).
 - **`answer.given`:** `idempotency_key = answer.given:${max_update_id}` (см. INV-07). В payload: **`max_update_id`**, **`max_user_id`**, **`answer_type`** (iter-2: `text`), **`answer_value`** — текст ответа.
 
+### Диалог iter-3 (LLM после `core:first`)
+
+- После **`answer.given`** на **`core:first`** и далее после каждого ответа на **`core:llm:k`**, пока номер шага меньше лимита (по умолчанию **5**, переменная окружения `LLM_FOLLOWUP_COUNT`), бот генерирует следующий вопрос через LLM.
+- **`question_id` для LLM-вопросов:** `core:llm:1` … `core:llm:N` (один номер на ход).
+- Порядок относительно исходящего сообщения пользователю (**INV-06**): сначала запись **`llm.called`**, затем **`question.asked`** с текстом вопроса, затем отправка в MAX.
+- **`llm.called`:** `idempotency_key = llm.called:${session_id}:core:llm:${k}` (один вызов на номер вопроса `k`). В payload: **`session_id`**, **`max_user_id`**, **`model`**, **`provider`** (`anthropic` | `openai`), **`prompt_version`**, **`input_hash`**, **`latency_ms`**, **`question_text`** — сгенерированный текст следующего вопроса (для трассировки и восстановления при сбое между `llm.called` и `question.asked`).
+- **`question.asked` (LLM):** `idempotency_key = question.asked:${session_id}:core:llm:${k}`; в payload **`llm_call_id`** = `event_id` события **`llm.called`** для этого хода; остальное как у iter-2 (`session_id`, `question_id`, `question_text`, `layer`, `max_user_id`).
+- **`correlation_id`** для `llm.called` и LLM-`question.asked`: **`session_id`**.
+
 ---
 
 ## Каталог `event_type`

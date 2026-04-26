@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import type { Config } from './config.js';
 import { healthRoutes } from './routes/health.js';
+import { promptsRoutes } from './routes/prompts.js';
 import { webhookRoutes } from './routes/webhook.js';
 
 export async function buildApp(opts: {
@@ -12,6 +13,7 @@ export async function buildApp(opts: {
     logger: { level: opts.config.logLevel },
   });
   await app.register(healthRoutes);
+  await app.register(promptsRoutes);
   await app.register(webhookRoutes, {
     config: opts.config,
     pool: opts.pool,

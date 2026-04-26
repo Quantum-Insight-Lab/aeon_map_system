@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CORE_FIRST_QUESTION_ID } from '../src/dialog/constants.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { insertEvent } from '../src/db/insert-event.js';
@@ -8,6 +8,28 @@ import type { Config } from '../src/config.js';
 import type { MaxUpdate } from '../src/integrations/max/types.js';
 
 const dsn = process.env.TEST_DATABASE_URL;
+
+function mockLlmFetch(): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('api.anthropic.com')) {
+        return new Response(
+          JSON.stringify({ content: [{ type: 'text', text: 'Следующий вопрос от тестового LLM?' }] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (url.includes('api.openai.com')) {
+        return new Response(
+          JSON.stringify({ choices: [{ message: { content: 'Fallback вопрос OpenAI?' } }] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }),
+  );
+}
 
 describe.skipIf(!dsn)('event store (integration)', () => {
   let pool: pg.Pool;
@@ -21,6 +43,12 @@ describe.skipIf(!dsn)('event store (integration)', () => {
     logLevel: 'silent',
     firstCoreQuestionText: 'Тестовый первый вопрос?',
     dialogAnswerAckText: 'Ок.',
+    anthropicApiKey: 'test-anthropic',
+    anthropicModel: 'claude-test',
+    openaiApiKey: 'test-openai',
+    openaiTextModel: 'gpt-test',
+    llmTimeoutMs: 5000,
+    llmFollowupCount: 5,
   };
 
   const log = {
@@ -38,7 +66,12 @@ describe.skipIf(!dsn)('event store (integration)', () => {
   });
 
   beforeEach(async () => {
+    mockLlmFetch();
     await pool.query('TRUNCATE events');
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('rejects UPDATE on events (append-only trigger)', async () => {
@@ -137,6 +170,8 @@ describe.skipIf(!dsn)('event store (integration)', () => {
       'session.opened',
       'question.asked',
       'answer.given',
+      'llm.called',
+      'question.asked',
     ]);
     const ans = await pool.query<{ answer_value: string }>(
       `SELECT payload->>'answer_value' AS answer_value FROM events WHERE event_type = 'answer.given'`,

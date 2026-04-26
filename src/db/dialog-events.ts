@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { DialogEventRow } from '../dialog/resolve-state.js';
 
-const DIALOG_EVENT_TYPES = ['user.started', 'session.opened', 'question.asked', 'answer.given'] as const;
+const DIALOG_EVENT_TYPES = ['user.started', 'session.opened', 'question.asked', 'answer.given', 'llm.called'] as const;
 
 /** События диалога для пользователя MAX (фильтр по payload.max_user_id). */
 export async function fetchDialogEventsForUser(pool: Pool, maxUserId: number): Promise<DialogEventRow[]> {
