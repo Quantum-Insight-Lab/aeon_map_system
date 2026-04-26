@@ -15,6 +15,8 @@
     "test:watch": "vitest",
     "test:db:prepare": "node scripts/ensure-test-db.mjs",
     "test:all": "npm run test:db:prepare && npm run test",
+    "db:clear": "node --env-file=.env scripts/clear-events.mjs",
+    "db:clear:test": "node scripts/clear-events.mjs --test",
     "max:subscribe": "node --env-file=.env scripts/register-max-subscription.mjs",
     "max:subscriptions": "node --env-file=.env scripts/register-max-subscription.mjs --status"
   },
