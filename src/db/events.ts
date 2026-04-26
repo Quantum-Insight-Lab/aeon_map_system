@@ -1,9 +1,12 @@
 import type { Pool } from 'pg';
+import { insertEvent } from './insert-event.js';
 
 export type InsertUserStartedParams = {
   userId: number;
   locale: string | null;
   referralSource: string | null;
+  /** Нормализованный идентификатор доставки MAX (см. resolveMaxUpdateId). */
+  maxUpdateId: string | null;
   correlationId?: string | null;
 };
 
@@ -12,25 +15,22 @@ export async function insertUserStarted(
   pool: Pool,
   params: InsertUserStartedParams,
 ): Promise<'inserted' | 'duplicate'> {
-  const idempotencyKey = `user.started:${params.userId}`;
-  const result = await pool.query<{ event_id: string }>(
-    `INSERT INTO events (
-      event_type, occurred_at, actor, subject, payload, idempotency_key, schema_version, correlation_id
-    ) VALUES ($1, now(), $2::jsonb, $3::jsonb, $4::jsonb, $5, 1, $6)
-    ON CONFLICT (idempotency_key) DO NOTHING
-    RETURNING event_id`,
-    [
-      'user.started',
-      JSON.stringify({ type: 'user', max_user_id: params.userId }),
-      JSON.stringify({ type: 'service', id: 'aeon-max-bot' }),
-      JSON.stringify({
-        max_user_id: params.userId,
-        locale: params.locale,
-        referral_source: params.referralSource,
-      }),
-      idempotencyKey,
-      params.correlationId ?? null,
-    ],
-  );
-  return result.rows.length > 0 ? 'inserted' : 'duplicate';
+  const payload: Record<string, unknown> = {
+    max_user_id: params.userId,
+    locale: params.locale,
+    referral_source: params.referralSource,
+  };
+  if (params.maxUpdateId != null) {
+    payload.max_update_id = params.maxUpdateId;
+  }
+
+  return insertEvent(pool, {
+    eventType: 'user.started',
+    actor: { id: String(params.userId), role: 'user' },
+    subject: { entity: 'max_bot', id: 'aeon-max-bot' },
+    payload,
+    idempotencyKey: `user.started:${params.userId}`,
+    schemaVersion: 1,
+    correlationId: params.correlationId ?? null,
+  });
 }

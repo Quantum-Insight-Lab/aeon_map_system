@@ -29,6 +29,10 @@ NOTES.local.md
 docs/private/
 scratch/
 
+# Маркетинг и черновики постов (локально)
+marketing/
+marketings/
+
 # Docker volumes и локальные БД
 pgdata/
 redis-data/
