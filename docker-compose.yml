@@ -17,24 +17,12 @@ services:
       retries: 15
       start_period: 25s
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 2s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
-
   app:
     build: .
     ports:
       - "3000:3000"
     environment:
       DATABASE_URL: postgres://aeon:aeon@postgres:5432/aeon
-      REDIS_URL: redis://redis:6379
       PORT: "3000"
       LOG_LEVEL: info
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:-}
@@ -42,8 +30,6 @@ services:
       MAX_API_BASE_URL: ${MAX_API_BASE_URL:-https://platform-api.max.ru}
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
 
 volumes:

@@ -1,16 +1,14 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { Pool } from 'pg';
 import type { Config } from '../config.js';
-import type { AppRedis } from '../lib/redis.js';
 import type { MaxUpdate } from '../integrations/max/types.js';
 import { handleMaxWebhook } from '../services/webhook-service.js';
 
 export const webhookRoutes: FastifyPluginAsync<{
   config: Config;
   pool: Pool;
-  redis: AppRedis;
 }> = async (app, opts) => {
-  const { config, pool, redis } = opts;
+  const { config, pool } = opts;
 
   app.post('/webhook', async (req, reply) => {
     if (config.maxWebhookSecret) {
@@ -25,7 +23,6 @@ export const webhookRoutes: FastifyPluginAsync<{
       const result = await handleMaxWebhook({
         config,
         pool,
-        redis,
         update,
         log: app.log,
       });

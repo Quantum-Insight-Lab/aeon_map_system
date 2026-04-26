@@ -334,7 +334,7 @@ architecture:
       role: "принимает webhook от MAX, отдаёт ответы"
       responsibilities:
         - "парсинг MAX update"
-        - "идемпотентность по update_id"
+        - "идемпотентность по update_id (нормализованный max_update_id — см. docs/SPEC/events.md)"
         - "форматирование сообщений и кнопок MAX"
       must_not: "содержать бизнес-логику"
 

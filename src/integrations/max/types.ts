@@ -4,6 +4,8 @@ export type MaxUpdate = MessageCreatedUpdate | BotStartedUpdate | UnknownUpdate;
 export type UnknownUpdate = {
   update_type: string;
   timestamp: number;
+  /** Если платформа MAX начнёт отдавать стабильный id update в корне — приоритет для max_update_id */
+  update_id?: string | number;
   message?: MaxMessage;
   user_locale?: string | null;
 };
@@ -11,6 +13,7 @@ export type UnknownUpdate = {
 export interface MessageCreatedUpdate {
   update_type: 'message_created';
   timestamp: number;
+  update_id?: string | number;
   message: MaxMessage;
   user_locale?: string | null;
 }
@@ -18,6 +21,7 @@ export interface MessageCreatedUpdate {
 export interface BotStartedUpdate {
   update_type: 'bot_started';
   timestamp: number;
+  update_id?: string | number;
   chat_id: number;
   user: { user_id: number; name?: string; username?: string };
   payload?: string | null;

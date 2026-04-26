@@ -2,7 +2,6 @@ import { loadConfig } from './config.js';
 import { runMigrations } from './db/migrate.js';
 import { createPool } from './db/pool.js';
 import { buildApp } from './app.js';
-import { connectRedis } from './lib/redis.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -13,9 +12,7 @@ async function main(): Promise<void> {
   const pool = createPool(config.databaseUrl);
   await runMigrations(pool);
 
-  const redis = await connectRedis(config.redisUrl);
-
-  const app = await buildApp({ config, pool, redis });
+  const app = await buildApp({ config, pool });
   await app.listen({ host: '0.0.0.0', port: config.port });
 }
 

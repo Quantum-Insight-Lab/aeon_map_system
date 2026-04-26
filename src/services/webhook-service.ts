@@ -1,10 +1,9 @@
 import type { Pool } from 'pg';
 import type { Config } from '../config.js';
-import type { AppRedis } from '../lib/redis.js';
 import { insertUserStarted } from '../db/events.js';
 import { sendMaxUserMessage } from '../integrations/max/client.js';
 import type { BotStartedUpdate, MaxUpdate, MessageCreatedUpdate } from '../integrations/max/types.js';
-import { claimWebhookDedup } from '../lib/dedup.js';
+import { resolveMaxUpdateId } from '../integrations/max/update-id.js';
 
 function isBotStarted(u: MaxUpdate): u is BotStartedUpdate {
   return u.update_type === 'bot_started' && 'user' in u && u.user != null;
@@ -14,37 +13,19 @@ function isMessageCreated(u: MaxUpdate): u is MessageCreatedUpdate {
   return u.update_type === 'message_created' && 'message' in u && u.message != null;
 }
 
-function webhookDedupKey(update: MaxUpdate): string | null {
-  if (isBotStarted(update)) {
-    return `bot_started:${update.timestamp}:${update.user.user_id}`;
-  }
-  if (isMessageCreated(update)) {
-    const mid = update.message.body?.mid;
-    if (mid) return `message:${mid}`;
-    const uid = update.message.sender?.user_id;
-    if (uid != null) return `message_fallback:${update.message.timestamp}:${uid}`;
-  }
-  return null;
-}
-
 export async function handleMaxWebhook(
   opts: {
     config: Config;
     pool: Pool;
-    redis: AppRedis;
     update: MaxUpdate;
     log: { warn: (o: unknown, msg?: string) => void; info: (o: unknown, msg?: string) => void };
   },
 ): Promise<{ duplicate: boolean; skipped: boolean }> {
-  const { config, pool, redis, update, log } = opts;
-  const dedupKey = webhookDedupKey(update);
-  if (!dedupKey) {
-    log.warn({ update_type: update.update_type }, 'webhook: no dedup key, skip');
+  const { config, pool, update, log } = opts;
+  const maxUpdateId = resolveMaxUpdateId(update);
+  if (!maxUpdateId) {
+    log.warn({ update_type: update.update_type }, 'webhook: no max_update_id, skip');
     return { duplicate: false, skipped: true };
-  }
-  const first = await claimWebhookDedup(redis, dedupKey);
-  if (!first) {
-    return { duplicate: true, skipped: false };
   }
 
   if (isBotStarted(update)) {
@@ -52,6 +33,7 @@ export async function handleMaxWebhook(
       userId: update.user.user_id,
       locale: null,
       referralSource: typeof update.payload === 'string' ? update.payload : null,
+      maxUpdateId,
     });
     if (ins === 'inserted' && config.maxBotToken) {
       await sendMaxUserMessage({
@@ -63,7 +45,7 @@ export async function handleMaxWebhook(
     } else if (ins === 'inserted' && !config.maxBotToken) {
       log.warn('MAX_BOT_TOKEN empty: skip outbound message');
     }
-    return { duplicate: false, skipped: false };
+    return { duplicate: ins === 'duplicate', skipped: false };
   }
 
   if (isMessageCreated(update)) {
@@ -80,6 +62,7 @@ export async function handleMaxWebhook(
       userId: uid,
       locale: update.user_locale ?? null,
       referralSource: null,
+      maxUpdateId,
     });
     if (ins === 'inserted' && config.maxBotToken) {
       await sendMaxUserMessage({
@@ -88,10 +71,10 @@ export async function handleMaxWebhook(
         userId: uid,
         text: 'Привет!',
       });
-    } else if (ins === 'inserted' && !config.maxBotToken) {
+    } else     if (ins === 'inserted' && !config.maxBotToken) {
       log.warn('MAX_BOT_TOKEN empty: skip outbound message');
     }
-    return { duplicate: false, skipped: false };
+    return { duplicate: ins === 'duplicate', skipped: false };
   }
 
   return { duplicate: false, skipped: true };
