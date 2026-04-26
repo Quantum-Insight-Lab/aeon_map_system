@@ -1,4 +1,9 @@
-import { CORE_FIRST_QUESTION_ID } from './constants.js';
+import {
+  CORE_FIRST_QUESTION_ID,
+  CORE_LLM_QUESTION_RE,
+  LLM_FOLLOWUP_COUNT,
+  coreLlmQuestionId,
+} from './constants.js';
 
 export type DialogEventRow = {
   event_type: string;
@@ -8,7 +13,8 @@ export type DialogEventRow = {
 export type DialogState =
   | { type: 'needs_first_question' }
   | { type: 'awaiting_answer'; sessionId: string; questionId: string; openingMessageMid: string | null }
-  | { type: 'answered' };
+  | { type: 'needs_next_llm'; sessionId: string; lastAnswerQuestionId: string }
+  | { type: 'session_complete' };
 
 function openingMidForSession(events: DialogEventRow[], sessionId: string): string | null {
   for (const e of events) {
@@ -20,38 +26,66 @@ function openingMidForSession(events: DialogEventRow[], sessionId: string): stri
   return null;
 }
 
+function lastAnswerGivenIndex(events: DialogEventRow[]): number {
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].event_type === 'answer.given') {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function expectedNextLlmQuestionId(lastAnswerQuestionId: string, llmFollowupCount: number): string | null {
+  if (lastAnswerQuestionId === CORE_FIRST_QUESTION_ID) {
+    return coreLlmQuestionId(1);
+  }
+  const m = CORE_LLM_QUESTION_RE.exec(lastAnswerQuestionId);
+  if (!m) {
+    return null;
+  }
+  const k = Number(m[1]);
+  if (k >= llmFollowupCount) {
+    return null;
+  }
+  return coreLlmQuestionId(k + 1);
+}
+
 /**
- * Выводит состояние диалога iter-2 по хронологии событий пользователя (user.started, session, question, answer).
+ * Состояние диалога: pending Q/A по последнему question.asked, затем LLM-цепочка core:llm:1..N.
  */
-export function inferDialogState(events: DialogEventRow[]): DialogState {
-  let currentSessionId: string | null = null;
-  let pendingCoreQuestionSessionId: string | null = null;
-  let answeredCoreFirst = false;
+export function inferDialogState(
+  events: DialogEventRow[],
+  opts?: { llmFollowupCount?: number },
+): DialogState {
+  const llmFollowupCount = opts?.llmFollowupCount ?? LLM_FOLLOWUP_COUNT;
+
+  let pending: { sessionId: string; questionId: string } | null = null;
 
   for (const e of events) {
     switch (e.event_type) {
       case 'session.opened': {
-        const sid = e.payload.session_id;
-        if (sid != null) {
-          currentSessionId = String(sid);
-        }
-        pendingCoreQuestionSessionId = null;
+        pending = null;
         break;
       }
       case 'question.asked': {
-        if (
-          e.payload.question_id === CORE_FIRST_QUESTION_ID &&
-          currentSessionId != null &&
-          String(e.payload.session_id) === currentSessionId
-        ) {
-          pendingCoreQuestionSessionId = currentSessionId;
+        const sid = e.payload.session_id;
+        const qid = e.payload.question_id;
+        if (sid != null && qid != null) {
+          pending = { sessionId: String(sid), questionId: String(qid) };
         }
         break;
       }
       case 'answer.given': {
-        if (e.payload.question_id === CORE_FIRST_QUESTION_ID) {
-          answeredCoreFirst = true;
-          pendingCoreQuestionSessionId = null;
+        const sid = e.payload.session_id;
+        const qid = e.payload.question_id;
+        if (
+          pending != null &&
+          sid != null &&
+          qid != null &&
+          String(sid) === pending.sessionId &&
+          String(qid) === pending.questionId
+        ) {
+          pending = null;
         }
         break;
       }
@@ -60,23 +94,43 @@ export function inferDialogState(events: DialogEventRow[]): DialogState {
     }
   }
 
-  if (answeredCoreFirst) {
-    return { type: 'answered' };
-  }
-
-  if (pendingCoreQuestionSessionId != null) {
+  if (pending != null) {
+    const openingMessageMid =
+      pending.questionId === CORE_FIRST_QUESTION_ID ? openingMidForSession(events, pending.sessionId) : null;
     return {
       type: 'awaiting_answer',
-      sessionId: pendingCoreQuestionSessionId,
-      questionId: CORE_FIRST_QUESTION_ID,
-      openingMessageMid: openingMidForSession(events, pendingCoreQuestionSessionId),
+      sessionId: pending.sessionId,
+      questionId: pending.questionId,
+      openingMessageMid,
     };
   }
 
-  const hasUserStarted = events.some((x) => x.event_type === 'user.started');
-  if (hasUserStarted) {
-    return { type: 'needs_first_question' };
+  const lastAnsIdx = lastAnswerGivenIndex(events);
+  if (lastAnsIdx < 0) {
+    const hasUserStarted = events.some((x) => x.event_type === 'user.started');
+    return hasUserStarted ? { type: 'needs_first_question' } : { type: 'needs_first_question' };
   }
 
-  return { type: 'needs_first_question' };
+  const lastAns = events[lastAnsIdx];
+  const lastQid = String(lastAns.payload.question_id ?? '');
+  const lastSid = String(lastAns.payload.session_id ?? '');
+
+  const llmMatch = CORE_LLM_QUESTION_RE.exec(lastQid);
+  if (llmMatch) {
+    const k = Number(llmMatch[1]);
+    if (k >= llmFollowupCount) {
+      return { type: 'session_complete' };
+    }
+  }
+
+  const expectedNext = expectedNextLlmQuestionId(lastQid, llmFollowupCount);
+  if (expectedNext == null) {
+    return { type: 'session_complete' };
+  }
+
+  return {
+    type: 'needs_next_llm',
+    sessionId: lastSid,
+    lastAnswerQuestionId: lastQid,
+  };
 }

@@ -1,5 +1,7 @@
 import type { Pool } from 'pg';
 import type { Config } from '../config.js';
+import { CORE_FIRST_QUESTION_ID } from '../dialog/constants.js';
+import { deliverNextLlmQuestion } from '../dialog/deliver-next-llm.js';
 import { inferDialogState } from '../dialog/resolve-state.js';
 import { fetchDialogEventsForUser } from '../db/dialog-events.js';
 import { insertUserStarted } from '../db/events.js';
@@ -19,6 +21,10 @@ function isBotStarted(u: MaxUpdate): u is BotStartedUpdate {
 
 function isMessageCreated(u: MaxUpdate): u is MessageCreatedUpdate {
   return u.update_type === 'message_created' && 'message' in u && u.message != null;
+}
+
+function inferOpts(config: Config) {
+  return { llmFollowupCount: config.llmFollowupCount };
 }
 
 async function openIter2SessionAndAskFirstQuestion(opts: {
@@ -73,8 +79,13 @@ export async function handleMaxWebhook(opts: {
       referralSource: typeof update.payload === 'string' ? update.payload : null,
       maxUpdateId,
     });
-    const rows = await fetchDialogEventsForUser(pool, userId);
-    const state = inferDialogState(rows);
+    let rows = await fetchDialogEventsForUser(pool, userId);
+    let state = inferDialogState(rows, inferOpts(config));
+    if (state.type === 'needs_next_llm') {
+      await deliverNextLlmQuestion({ pool, config, maxUserId: userId, state, log });
+      rows = await fetchDialogEventsForUser(pool, userId);
+      state = inferDialogState(rows, inferOpts(config));
+    }
     if (state.type === 'needs_first_question') {
       await openIter2SessionAndAskFirstQuestion({
         pool,
@@ -105,10 +116,19 @@ export async function handleMaxWebhook(opts: {
       maxUpdateId,
     });
 
-    const rows = await fetchDialogEventsForUser(pool, uid);
-    const state = inferDialogState(rows);
+    let rows = await fetchDialogEventsForUser(pool, uid);
+    let state = inferDialogState(rows, inferOpts(config));
 
-    if (state.type === 'answered') {
+    if (state.type === 'needs_next_llm') {
+      await deliverNextLlmQuestion({ pool, config, maxUserId: uid, state, log });
+      rows = await fetchDialogEventsForUser(pool, uid);
+      state = inferDialogState(rows, inferOpts(config));
+      if (state.type === 'awaiting_answer') {
+        return { duplicate: userIns === 'duplicate', skipped: true };
+      }
+    }
+
+    if (state.type === 'session_complete') {
       return { duplicate: userIns === 'duplicate', skipped: true };
     }
 
@@ -136,15 +156,22 @@ export async function handleMaxWebhook(opts: {
         answerType: 'text',
         maxUpdateId,
       });
-      if (ansIns === 'inserted' && config.maxBotToken) {
+      if (ansIns === 'inserted' && state.questionId === CORE_FIRST_QUESTION_ID && config.maxBotToken) {
         await sendMaxUserMessage({
           baseUrl: config.maxApiBaseUrl,
           token: config.maxBotToken,
           userId: uid,
           text: config.dialogAnswerAckText,
         });
-      } else if (ansIns === 'inserted' && !config.maxBotToken) {
+      } else if (ansIns === 'inserted' && state.questionId === CORE_FIRST_QUESTION_ID && !config.maxBotToken) {
         log.warn('MAX_BOT_TOKEN empty: skip answer ack');
+      }
+      if (ansIns === 'inserted') {
+        rows = await fetchDialogEventsForUser(pool, uid);
+        state = inferDialogState(rows, inferOpts(config));
+        if (state.type === 'needs_next_llm') {
+          await deliverNextLlmQuestion({ pool, config, maxUserId: uid, state, log });
+        }
       }
       return { duplicate: userIns === 'duplicate', skipped: false };
     }

@@ -7,8 +7,16 @@ export type Config = {
   logLevel: string;
   /** Статичный первый вопрос Core (iter-2). */
   firstCoreQuestionText: string;
-  /** Короткое подтверждение после answer.given. */
+  /** Короткое подтверждение после answer.given на core:first. */
   dialogAnswerAckText: string;
+  anthropicApiKey: string;
+  anthropicModel: string;
+  openaiApiKey: string;
+  openaiTextModel: string;
+  /** Таймаут HTTP вызова LLM (мс). */
+  llmTimeoutMs: number;
+  /** Сколько LLM-вопросов после core:first (по умолчанию как в vibepp). */
+  llmFollowupCount: number;
 };
 
 export function loadConfig(): Config {
@@ -23,5 +31,11 @@ export function loadConfig(): Config {
       process.env.FIRST_CORE_QUESTION_TEXT ??
       'Привет! С чего хочешь начать разговор о себе — про работу и цели, про отношения или про ощущение смысла?',
     dialogAnswerAckText: process.env.DIALOG_ANSWER_ACK_TEXT ?? 'Спасибо, ответ записан!',
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+    anthropicModel: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514',
+    openaiApiKey: process.env.OPENAI_API_KEY ?? '',
+    openaiTextModel: process.env.OPENAI_TEXT_MODEL ?? 'gpt-4o-mini',
+    llmTimeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? 45_000),
+    llmFollowupCount: Number(process.env.LLM_FOLLOWUP_COUNT ?? 5),
   };
 }

@@ -29,7 +29,10 @@ export type InsertEventParams = {
  * Append-only вставка события. Идемпотентность по idempotency_key (UNIQUE).
  * event_id — UUID v7 по контракту vibepp.
  */
-export async function insertEvent(pool: Pool, params: InsertEventParams): Promise<'inserted' | 'duplicate'> {
+export async function insertEventWithId(
+  pool: Pool,
+  params: InsertEventParams,
+): Promise<{ inserted: boolean; eventId: string }> {
   const eventId = uuidv7();
   const occurredAt = params.occurredAt ?? new Date();
   const schemaVersion = params.schemaVersion ?? 1;
@@ -52,5 +55,21 @@ export async function insertEvent(pool: Pool, params: InsertEventParams): Promis
       params.correlationId ?? null,
     ],
   );
-  return result.rows.length > 0 ? 'inserted' : 'duplicate';
+  if (result.rows.length > 0) {
+    return { inserted: true, eventId: result.rows[0].event_id };
+  }
+  const dup = await pool.query<{ event_id: string }>(
+    `SELECT event_id FROM events WHERE idempotency_key = $1 LIMIT 1`,
+    [params.idempotencyKey],
+  );
+  const existing = dup.rows[0]?.event_id;
+  if (!existing) {
+    throw new Error(`insertEventWithId: conflict but no row for key ${params.idempotencyKey}`);
+  }
+  return { inserted: false, eventId: existing };
+}
+
+export async function insertEvent(pool: Pool, params: InsertEventParams): Promise<'inserted' | 'duplicate'> {
+  const r = await insertEventWithId(pool, params);
+  return r.inserted ? 'inserted' : 'duplicate';
 }
