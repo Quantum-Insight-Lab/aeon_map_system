@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { CORE_FIRST_QUESTION_ID } from '../src/dialog/constants.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { insertEvent } from '../src/db/insert-event.js';
 import { handleMaxWebhook } from '../src/services/webhook-service.js';
@@ -18,6 +19,8 @@ describe.skipIf(!dsn)('event store (integration)', () => {
     maxWebhookSecret: '',
     maxApiBaseUrl: 'https://platform-api.max.ru',
     logLevel: 'silent',
+    firstCoreQuestionText: 'Тестовый первый вопрос?',
+    dialogAnswerAckText: 'Ок.',
   };
 
   const log = {
@@ -82,5 +85,109 @@ describe.skipIf(!dsn)('event store (integration)', () => {
       `SELECT count(*)::text AS c FROM events WHERE event_type = 'user.started' AND payload->>'max_user_id' = '4242'`,
     );
     expect(r.rows[0].c).toBe('1');
+  });
+
+  it('iter-2: first message creates session.opened and question.asked', async () => {
+    const u1: MaxUpdate = {
+      update_type: 'message_created',
+      timestamp: 1,
+      message: {
+        timestamp: 1,
+        body: { mid: 'mid-iter2-1', text: 'hi' },
+        sender: { user_id: 9100, is_bot: false },
+      },
+    };
+    await handleMaxWebhook({ config: testConfig, pool, update: u1, log });
+    const types = await pool.query<{ event_type: string }>(
+      `SELECT event_type FROM events ORDER BY occurred_at`,
+    );
+    expect(types.rows.map((r) => r.event_type)).toEqual([
+      'user.started',
+      'session.opened',
+      'question.asked',
+    ]);
+  });
+
+  it('iter-2: second message appends answer.given', async () => {
+    const u1: MaxUpdate = {
+      update_type: 'message_created',
+      timestamp: 1,
+      message: {
+        timestamp: 1,
+        body: { mid: 'mid-iter2-a', text: 'hi' },
+        sender: { user_id: 9101, is_bot: false },
+      },
+    };
+    const u2: MaxUpdate = {
+      update_type: 'message_created',
+      timestamp: 2,
+      message: {
+        timestamp: 2,
+        body: { mid: 'mid-iter2-b', text: 'мой ответ' },
+        sender: { user_id: 9101, is_bot: false },
+      },
+    };
+    await handleMaxWebhook({ config: testConfig, pool, update: u1, log });
+    await handleMaxWebhook({ config: testConfig, pool, update: u2, log });
+    const types = await pool.query<{ event_type: string }>(
+      `SELECT event_type FROM events ORDER BY occurred_at`,
+    );
+    expect(types.rows.map((r) => r.event_type)).toEqual([
+      'user.started',
+      'session.opened',
+      'question.asked',
+      'answer.given',
+    ]);
+    const ans = await pool.query<{ answer_value: string }>(
+      `SELECT payload->>'answer_value' AS answer_value FROM events WHERE event_type = 'answer.given'`,
+    );
+    expect(ans.rows[0].answer_value).toBe('мой ответ');
+  });
+
+  it('iter-2: duplicate answer webhook does not duplicate answer.given', async () => {
+    const u1: MaxUpdate = {
+      update_type: 'message_created',
+      timestamp: 1,
+      message: {
+        timestamp: 1,
+        body: { mid: 'mid-iter2-d1', text: 'hi' },
+        sender: { user_id: 9102, is_bot: false },
+      },
+    };
+    const u2: MaxUpdate = {
+      update_type: 'message_created',
+      timestamp: 2,
+      message: {
+        timestamp: 2,
+        body: { mid: 'mid-iter2-d2', text: 'ans' },
+        sender: { user_id: 9102, is_bot: false },
+      },
+    };
+    await handleMaxWebhook({ config: testConfig, pool, update: u1, log });
+    await handleMaxWebhook({ config: testConfig, pool, update: u2, log });
+    await handleMaxWebhook({ config: testConfig, pool, update: u2, log });
+    const c = await pool.query<{ c: string }>(`SELECT count(*)::text AS c FROM events WHERE event_type = 'answer.given'`);
+    expect(c.rows[0].c).toBe('1');
+  });
+
+  it('iter-2: duplicate first message does not insert answer.given', async () => {
+    const u1: MaxUpdate = {
+      update_type: 'message_created',
+      timestamp: 1,
+      message: {
+        timestamp: 1,
+        body: { mid: 'mid-iter2-open-dup', text: 'hi' },
+        sender: { user_id: 9103, is_bot: false },
+      },
+    };
+    await handleMaxWebhook({ config: testConfig, pool, update: u1, log });
+    await handleMaxWebhook({ config: testConfig, pool, update: u1, log });
+    const c = await pool.query<{ c: string }>(`SELECT count(*)::text AS c FROM events WHERE event_type = 'answer.given'`);
+    expect(c.rows[0].c).toBe('0');
+    const q = await pool.query<{ c: string }>(
+      `SELECT count(*)::text AS c FROM events WHERE event_type = 'question.asked' AND payload->>'question_id' = $1`,
+      [CORE_FIRST_QUESTION_ID],
+    );
+    expect(q.rows[0].c).toBe('1');
   });
 });
