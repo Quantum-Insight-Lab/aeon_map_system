@@ -224,6 +224,38 @@ Event store только **INSERT**, контракт полей как в `even
 
 ---
 
+## Issue 9
+
+**Title:** `[Docs/Infra] Синхронизировать vibepp, SPEC, GITHUB_ISSUES и compose: Redis, iter-0, rules.hard`
+
+**Milestone:** _(нет — техдолг документации / инфры)_
+
+**Labels:** `area/infrastructure`, `mvp` _(опционально)_
+
+**Description:**
+
+Зафиксирован **временный drift** между репозиторием и текстом спеки (см. **`docs/ADR/001-redis-compose.md`**, секция **`repository_adr`** в `docs/aeon-max-bot.vibepp.yaml`).
+
+**Несогласованности:**
+
+- **`architecture.stack.cache`** и deliverables **iter-0** в vibepp описывают **Redis** в compose; в **`docker-compose.yml`** сейчас только **Postgres + app** (Redis убран после iter-1, идемпотентность вебхука в Postgres).
+- **Issue 1** (черновик) всё ещё требует Postgres + Redis в compose — не совпадает с фактом.
+- **`rules.hard`**: формулировка «инварианты не в БД-триггерах» расходится с миграцией **`002_events_append_only`** (триггер запрета UPDATE/DELETE на `events`) — нужно либо уточнить исключение для append-only, либо перенести контроль только в код (политика продукта).
+
+**Deliverables:**
+
+- Обновить **`docs/aeon-max-bot.vibepp.yaml`**: stack / iter-0 / при необходимости `rules.hard` — в соответствии с выбранным направлением (вернуть Redis в compose **или** официально описать этап без Redis до появления сессий/rate limits).
+- Обновить **`docs/GITHUB_ISSUES.md` (Issue 1)** и при необходимости **`AGENTS.md`**, **`docs/SPEC/architecture.md`**, **`docs/CURSOR_PROMPT_MAX_BOT.md`**.
+- Закрыть ADR 001 новым статусом или ADR-наследником, когда drift снят.
+
+**Acceptance criteria:**
+
+- [ ] В vibepp и в Issue 1 нет противоречия с **`docker-compose.yml`** (или compose изменён под vibepp — явно в том же PR).
+- [ ] `rules.hard` согласован с политикой enforcement для таблицы `events` (триггер vs только приложение).
+- [ ] В **`docs/ADR/001-redis-compose.md`** отражён итог (обновлён статус / ссылка на PR).
+
+---
+
 ## Бэклог (после закрытия итерации 0–7)
 
 **Title:** `[Backlog] Freemium QIP: события биллинга, проверка баланса в Stability Engine`
