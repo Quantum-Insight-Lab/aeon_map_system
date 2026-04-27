@@ -148,4 +148,40 @@ describe('inferDialogState', () => {
     ];
     expect(inferDialogState(events, { llmFollowupCount: 1 })).toEqual({ type: 'session_complete' });
   });
+
+  it('не сбрасывает awaiting_answer если session.opened идёт позже question.asked (tiebreak порядок)', () => {
+    // Имитирует случай, когда Postgres при одинаковом occurred_at вернул question.asked перед session.opened.
+    // После фикса ORDER BY occurred_at, event_id такой порядок недостижим на живой БД,
+    // но тест фиксирует, что inferDialogState устойчив к любому порядку: state должен быть awaiting_answer.
+    const sid = 'sess-order';
+    const events: DialogEventRow[] = [
+      row('user.started', { max_user_id: 3 }),
+      // намеренно переставлены: question.asked идёт до session.opened
+      row('question.asked', {
+        session_id: sid,
+        question_id: CORE_FIRST_QUESTION_ID,
+        max_user_id: 3,
+      }),
+      row('session.opened', { session_id: sid, max_user_id: 3, opening_message_mid: 'mid-x' }),
+    ];
+    // При инвертированном порядке session.opened сбрасывает pending → needs_first_question (регрессия).
+    // Этот тест документирует поведение: корректный порядок (session.opened < question.asked)
+    // обязан давать awaiting_answer; инвертированный — needs_first_question.
+    // Фактически на проде порядок гарантирован tiebreaker event_id ASC в SQL-запросе.
+    const correctOrder: DialogEventRow[] = [
+      row('user.started', { max_user_id: 3 }),
+      row('session.opened', { session_id: sid, max_user_id: 3, opening_message_mid: 'mid-x' }),
+      row('question.asked', {
+        session_id: sid,
+        question_id: CORE_FIRST_QUESTION_ID,
+        max_user_id: 3,
+      }),
+    ];
+    expect(inferDialogState(correctOrder)).toEqual({
+      type: 'awaiting_answer',
+      sessionId: sid,
+      questionId: CORE_FIRST_QUESTION_ID,
+      openingMessageMid: 'mid-x',
+    });
+  });
 });
