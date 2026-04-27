@@ -10,7 +10,7 @@ export async function fetchDialogEventsForUser(pool: Pool, maxUserId: number): P
      FROM events
      WHERE event_type = ANY($1::text[])
        AND (payload->>'max_user_id') = $2
-     ORDER BY occurred_at ASC`,
+     ORDER BY occurred_at ASC, event_id ASC`,
     [DIALOG_EVENT_TYPES, String(maxUserId)],
   );
   return r.rows;
