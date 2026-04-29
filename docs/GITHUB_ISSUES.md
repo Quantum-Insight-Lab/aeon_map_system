@@ -33,7 +33,7 @@
 2. `Iteration 1 — Event Core`
 3. `Iteration 2 — Первый вопрос`
 4. `Iteration 3 — LLM-диалог`
-5. `Iteration 4 — Первая карта`
+5. `Iteration 4 — Первая карта (Cognitive по протоколу v1)`
 6. `Iteration 5 — MVP профиль`
 7. `Iteration 6 — Наблюдаемость`
 8. `Iteration 7 — Safety + Glyph + share card`
@@ -144,20 +144,39 @@ Event store только **INSERT**, контракт полей как в `even
 
 ## Issue 5
 
-**Title:** `[Iter 4] Первая карта: Stability Engine, CognitiveIdentityMap, card.computed, INV тесты`
+**Title:** `[Iter 4] Первая карта (Cognitive по протоколу v1): mapper, интерпретатор, card.computed, INV тесты`
 
 **Milestone:** `Iteration 4 — Первая карта`
 
-**Labels:** `iteration-4`, `mvp`, `area/aeon`, `area/stability`, `priority/p0`
+**Labels:** `iteration-4`, `mvp`, `area/aeon`, `area/dialog`, `area/llm`, `area/stability`, `priority/p0`
 
 **Description:**
 
-**Stability Engine** проверяет **CARD_CONFIDENCE_THRESHOLD**; первая карта **CognitiveIdentityMap**; событие **`card.computed`**. **CardSignal** / сквозные сигналы — если ещё не введены, зафиксировать минимальный путь согласно SPEC Блок 2. **Vitest + fast-check** для INV-03, INV-04 (и релевантных).
+**ADR:** [`docs/ADR/002-cognitive-protocol-mode.md`](ADR/002-cognitive-protocol-mode.md). Iter-4 переведён на **протокольный режим карт**: пороговая модель сигналов исключена, карта собирается строго после прохождения протокола методики `docs/methodology/Cognitive_Identity_Map_v1.md`.
+
+Поток на ход пользователя: `answer.given` → детерминированный **Protocol Mapper** (по таблицам §§3.2–3.4) → **`protocol.coordinate_assigned`** → LLM-интерпретатор (`cognitive-interpret-answer@v1`) → **`llm.called` (purpose=answer_interpretation)** + **`answer.interpreted`** → Dialog Engine добавляет следующий вопрос из очереди протокола → **`question.asked`** → одно сообщение пользователю «интерпретация + следующий вопрос». На 12/12 — aeon_engine собирает тип по таблице соответствий §4.1 + алгоритм §4.2, сверяет с LLM-интерпретациями (`purpose=rule_reconciliation`), пишет `card.computed`. Расхождения LLM с правилом выше `LLM_RULE_AGREEMENT_THRESHOLD` фиксируются в Book of Consciousness; правило — основной источник истины.
+
+**Deliverables:**
+
+- Очередь протокола Cognitive v1: 12 вопросов (`core:protocol:goal:1..4`, `core:protocol:modality:1..5`, `core:protocol:anchor:1..3`).
+- `src/protocols/cognitive_v1/` — определения вопросов, варианты ответов, маппинг по таблицам методики.
+- `src/protocol_mapper/` — детерминированный mapper, без LLM.
+- Событие **`protocol.coordinate_assigned`** (заменяет `card_signal.received`).
+- Prompt `prompts/cognitive-interpret-answer.md` (`@v1`).
+- Событие **`answer.interpreted`** + транзакция `answer.interpreted → question.asked → send` (INV-10).
+- aeon_engine: сборка типа, сверка LLM-vs-rule, выпуск `card.computed` с payload `{protocol_version, coordinates, matched_types, disagreement_with_llm}`.
+- Property-based тесты на **INV-03, INV-04, INV-05 (новая формулировка), INV-10** (Vitest + fast-check).
+- Feature-flag `DIALOG_LLM_NEXT_QUESTION` (default: false на Core) — выключает iter-3 LLM-генерацию следующего вопроса.
 
 **Acceptance criteria:**
 
-- [ ] Карта не назначается при confidence ниже порога.
-- [ ] Инварианты покрыты property-based тестами (минимум заявленные в задаче).
+- [ ] Cognitive-карта не назначается до 12/12 ответов протокола (INV-05).
+- [ ] На каждом протокольном ответе пользователь получает короткое объяснение, к какой координате его относит LLM; событие `answer.interpreted` зафиксировано до следующего `question.asked` (INV-10).
+- [ ] Следующий вопрос на Core берётся из очереди протокола, а не генерируется LLM.
+- [ ] Card не назначается при confidence < `CARD_CONFIDENCE_THRESHOLD` (INV-03).
+- [ ] При расхождении LLM-интерпретации с правилом выше `LLM_RULE_AGREEMENT_THRESHOLD` запись добавлена в Book of Consciousness; основной результат — от правила.
+- [ ] Множественные типы (рисунок) выставляются с явным флагом «синтетический рисунок» в payload (INV-04).
+- [ ] Property-based тесты на INV-03/04/05/10 зелёные.
 
 ---
 

@@ -1,7 +1,8 @@
 # Каталог событий — ÆON Map MAX Bot
 
 **Источник:** `aeon-max-bot.vibepp.yaml` → `events`.  
-**Контракт:** обязательные поля — `event_id`, `event_type`, `occurred_at`, `actor`, `subject`, `payload`, `idempotency_key`, `schema_version`; опционально `causation_id`, `correlation_id`.
+**Контракт:** обязательные поля — `event_id`, `event_type`, `occurred_at`, `actor`, `subject`, `payload`, `idempotency_key`, `schema_version`; опционально `causation_id`, `correlation_id`.  
+**ADR:** обновлено по **ADR 002** — удалён `card_signal.received`, добавлены `protocol.coordinate_assigned` и `answer.interpreted`, расширен payload `card.computed`.
 
 **Правило хранилища:** только `INSERT` в таблицу событий (см. `rules.hard`). На уровне PostgreSQL для таблицы `events` запрещены `UPDATE` и `DELETE` (триггер, миграция `002`).
 
@@ -33,14 +34,42 @@
 - **`question.asked` (первый вопрос Core):** `question_id = core:first`, `idempotency_key = question.asked:iter2:core:first:${max_user_id}`, в payload **`llm_call_id: null`**, текст вопроса из конфига приложения (`FIRST_CORE_QUESTION_TEXT` / дефолт в `config.ts`).
 - **`answer.given`:** `idempotency_key = answer.given:${max_update_id}` (см. INV-07). В payload: **`max_update_id`**, **`max_user_id`**, **`answer_type`** (iter-2: `text`), **`answer_value`** — текст ответа.
 
-### Диалог iter-3 (LLM после `core:first`)
+### Диалог iter-3 (LLM-генерация следующего вопроса) — за feature-flag (ADR 002)
+
+Логика iter-3 (`core:llm:k`) **остаётся в кодовой базе**, но на Core MVP **не используется**. Управляется feature-flag `DIALOG_LLM_NEXT_QUESTION` (default: false для Core). Применима к слоям без протокольной методики (если такие появятся в гибридном режиме). Контракт ниже — для случая, когда флаг включён:
 
 - После **`answer.given`** на **`core:first`** и далее после каждого ответа на **`core:llm:k`**, пока номер шага меньше лимита (по умолчанию **5**, переменная окружения `LLM_FOLLOWUP_COUNT`), бот генерирует следующий вопрос через LLM.
 - **`question_id` для LLM-вопросов:** `core:llm:1` … `core:llm:N` (один номер на ход).
 - Порядок относительно исходящего сообщения пользователю (**INV-06**): сначала запись **`llm.called`**, затем **`question.asked`** с текстом вопроса, затем отправка в MAX.
-- **`llm.called`:** `idempotency_key = llm.called:${session_id}:core:llm:${k}` (один вызов на номер вопроса `k`). В payload: **`session_id`**, **`max_user_id`**, **`model`**, **`provider`** (`anthropic` | `openai`), **`prompt_version`**, **`input_hash`**, **`latency_ms`**, **`question_text`** — сгенерированный текст следующего вопроса (для трассировки и восстановления при сбое между `llm.called` и `question.asked`).
-- **`question.asked` (LLM):** `idempotency_key = question.asked:${session_id}:core:llm:${k}`; в payload **`llm_call_id`** = `event_id` события **`llm.called`** для этого хода; остальное как у iter-2 (`session_id`, `question_id`, `question_text`, `layer`, `max_user_id`).
-- **`correlation_id`** для `llm.called` и LLM-`question.asked`: **`session_id`**.
+- **`llm.called`:** `idempotency_key = llm.called:${session_id}:core:llm:${k}` (один вызов на номер вопроса `k`). В payload: **`session_id`**, **`max_user_id`**, **`model`**, **`provider`** (`anthropic` | `openai`), **`prompt_version`**, **`input_hash`**, **`latency_ms`**, **`question_text`** — сгенерированный текст следующего вопроса.
+- **`question.asked` (LLM):** `idempotency_key = question.asked:${session_id}:core:llm:${k}`; в payload **`llm_call_id`** = `event_id` события **`llm.called`** для этого хода.
+
+### Диалог iter-4 (Cognitive v1 по протоколу)
+
+ADR 002. На Core MVP диалог идёт по очереди протокола методики, LLM используется как интерпретатор ответа, не как генератор следующего вопроса.
+
+- **`question_id` для протокола:** `core:protocol:goal:1..4` (Ц1–Ц4), `core:protocol:modality:1..5` (М1–М5), `core:protocol:anchor:1..3` (Я1–Я3).
+- **`idempotency_key`:** `question.asked:protocol:v1:${question_id}:${session_id}` — один и тот же протокольный вопрос не задаётся дважды в одной сессии.
+- **`answer.given`** для протокольного вопроса: `idempotency_key = answer.given:${max_update_id}` (как в iter-2/3); в payload, помимо стандартных полей, ожидается, что `answer_value` нормализован под формат варианта методики (например, цифра или буква).
+- **`protocol.coordinate_assigned`** (новый, ADR 002):
+  - causation — `event_id` соответствующего `answer.given`;
+  - correlation — `session_id`;
+  - `idempotency_key = protocol.coordinate_assigned:${session_id}:${question_id}` — одна координата на ответ;
+  - payload: `answer_id`, `user_id`, `card_type` (для iter-4 — `CognitiveIdentityMap`), `axis ∈ {goal, modality, anchor}`, `coordinate` (значение из таблиц §§3.2–3.4 методики), `source_question_id`, `llm_interpretation` (текст показанного объяснения), `llm_call_id`.
+- **`llm.called`** (интерпретатор):
+  - `purpose: "answer_interpretation"`;
+  - `idempotency_key = llm.called:${session_id}:${question_id}:interpret`;
+  - `prompt_version: "cognitive-interpret-answer@v1"`.
+- **`answer.interpreted`** (новый, ADR 002):
+  - causation — `event_id` соответствующего `answer.given`;
+  - correlation — `session_id`;
+  - `idempotency_key = answer.interpreted:${session_id}:${question_id}`;
+  - payload: `session_id`, `question_id`, `axis`, `coordinate`, `llm_call_id`, `interpretation_text`.
+  - **INV-10:** записывается ДО следующего `question.asked`.
+- **`card.computed`** (после 12/12):
+  - causation — `event_id` последнего `protocol.coordinate_assigned` (Я3);
+  - `idempotency_key = card.computed:${session_id}:CognitiveIdentityMap`;
+  - payload: `card_type`, `confidence`, `input_answer_ids`, `version`, `protocol_version` (`"v1"`), `coordinates {goal, modality, anchor}`, `matched_types[]` (1–3 типа из таблицы §4.1), `disagreement_with_llm` (опционально — список пунктов, где LLM-интерпретация разошлась с маппером выше `LLM_RULE_AGREEMENT_THRESHOLD`).
 
 ---
 
@@ -50,15 +79,18 @@
 |------|---------|----------------|------------------------|
 | **user.started** | Первый вход /start в MAX | max_user_id, locale, referral_source | — |
 | **session.opened** | Бот открыл сессию | session_id, layer, question_count_plan; iter-2: max_user_id, опц. opening_message_mid | после user.started или логики возврата |
-| **question.asked** | Бот отправил вопрос | session_id, question_id, question_text, layer, llm_call_id; iter-2: max_user_id | может следовать за llm.called |
-| **answer.given** | Пользователь ответил | session_id, question_id, answer_value, answer_type; iter-2: max_user_id, max_update_id | **неизменяем**; causation для card_signal.received |
-| **card_signal.received** | Классификатор сигналов | answer_id, user_id, card_type, weight, source_layer | несколько на один answer.given |
-| **llm.called** | Вызов Claude/OpenAI | session_id, model, prompt_version, input_hash, latency_ms | до отправки сообщения пользователю (INV-06) |
-| **card.computed** | Stability Engine назначил карту | card_type, confidence, input_answer_ids, version | после порогов сигналов + confidence |
+| **question.asked** | Бот отправил вопрос | session_id, question_id, question_text, layer, llm_call_id; iter-2: max_user_id | iter-4 — берётся из очереди протокола методики |
+| **answer.given** | Пользователь ответил | session_id, question_id, answer_value, answer_type; iter-2: max_user_id, max_update_id | **неизменяем**; causation для protocol.coordinate_assigned и answer.interpreted |
+| **protocol.coordinate_assigned** | Mapper присвоил координату по протокольному ответу | answer_id, user_id, card_type, axis, coordinate, source_question_id, llm_interpretation, llm_call_id | iter-4; одна координата на ответ; ADR 002 |
+| **answer.interpreted** | LLM-интерпретатор показал пользователю объяснение | session_id, question_id, axis, coordinate, llm_call_id, interpretation_text | iter-4; ДО следующего question.asked (INV-10); ADR 002 |
+| **llm.called** | Вызов Claude/OpenAI | session_id, model, prompt_version, input_hash, latency_ms, purpose | до отправки сообщения пользователю (INV-06); purpose ∈ {answer_interpretation, rule_reconciliation, ...} |
+| **card.computed** | aeon_engine собрал карту по протоколу методики | card_type, confidence, input_answer_ids, version, protocol_version, coordinates, matched_types, disagreement_with_llm | после 12/12; правило — основной источник истины (ADR 002) |
 | **session.completed** | Сессия завершена | session_id, duration_sec, answers_count, layers_covered | → запись в Book of Consciousness |
 | **profile.built** | Профиль пересобран из событий | profile_version, cards_included, glyph_id | read model |
 | **safety.triggered** | Gate 1/2 / кризис | session_id, trigger_category, action_taken | **без** сырого текста пользователя |
 | **session.abandoned** | Истёк SESSION_IDLE_TIMEOUT | session_id, last_answer_at, answers_count | статус сессии → abandoned |
+
+**Удалён ADR 002:** `card_signal.received` (заменён на `protocol.coordinate_assigned`).
 
 ---
 
