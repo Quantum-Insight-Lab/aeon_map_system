@@ -345,6 +345,42 @@ export function formatProtocolQuestionMessageHtml(q: ProtocolQuestion): string {
   return `${stemHtml}${PAR}${variantsHtml}${PAR}<i>Ответь <b>одной буквой</b> строки якоря — <b>А</b>–<b>З</b> (кириллица).</i>`;
 }
 
+/** Стем для MAX Markdown: *курсив*, между абзацами — \\n\\n (как в format=markdown). */
+function stemMarkdownToMarkdownStem(stem: string): string {
+  return stem
+    .split(/\n\s*\n/)
+    .map((para) => {
+      const p = para.trim();
+      let result = '';
+      let lastIndex = 0;
+      const re = /\*([^*]+)\*/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(p)) !== null) {
+        result += p.slice(lastIndex, m.index);
+        result += `*${m[1]}*`;
+        lastIndex = m.index + m[0].length;
+      }
+      result += p.slice(lastIndex);
+      return result.replace(/\n/g, ' ');
+    })
+    .join('\n\n');
+}
+
+/** Исходящее сообщение протокола для MAX API — format `markdown` (переносы через пустые строки; см. dev.max.ru). */
+export function formatProtocolQuestionMessageMarkdown(q: ProtocolQuestion): string {
+  const stemMd = stemMarkdownToMarkdownStem(q.stem);
+  if (q.axis === 'goal') {
+    const variantsMd = q.variants.map((v) => `**${v.key}.** ${v.text}`).join('\n\n');
+    return `${stemMd}\n\n**Варианты:**\n\n${variantsMd}\n\n**Ответь одной цифрой** — номер подходящего пункта от **1** до **8** (например: **6**). _Полный текст без номера не принимается._`;
+  }
+  if (q.axis === 'modality') {
+    const variantsMd = q.variants.map((v) => v.text).join('\n\n');
+    return `${stemMd}\n\n${variantsMd}\n\n**Ответь одной буквой**: **А**, **Б** или **М** (латиница A, B, M допустима).`;
+  }
+  const variantsMd = q.variants.map((v) => v.text).join('\n\n');
+  return `${stemMd}\n\n${variantsMd}\n\n**Ответь одной буквой** строки якоря — **А**–**З** (кириллица).`;
+}
+
 /** Подсказка при ответе, который mapper не разобрал (recovery или legacy-путь). */
 export function formatMapperInvalidReplyHtml(questionId: string): string {
   const q = getProtocolQuestion(questionId);
@@ -358,4 +394,19 @@ export function formatMapperInvalidReplyHtml(questionId: string): string {
     return `<b>Не распознал ответ.</b>${PAR}Ответь одной буквой: <b>А</b>, <b>Б</b> или <b>М</b>.`;
   }
   return `<b>Не распознал ответ.</b>${PAR}Ответь одной буквой якоря <b>А</b>–<b>З</b> (кириллица).`;
+}
+
+/** То же для отправки с format=markdown. */
+export function formatMapperInvalidReplyMarkdown(questionId: string): string {
+  const q = getProtocolQuestion(questionId);
+  if (!q) {
+    return `**Не распознал ответ.**\n\nПовтори ввод по формату текущего шага.`;
+  }
+  if (q.axis === 'goal') {
+    return `**Не распознал ответ.**\n\nНужна **одна цифра от 1 до 8** — номер пункта списка (например: **6**).`;
+  }
+  if (q.axis === 'modality') {
+    return `**Не распознал ответ.**\n\nОтветь одной буквой: **А**, **Б** или **М**.`;
+  }
+  return `**Не распознал ответ.**\n\nОтветь одной буквой якоря **А**–**З** (кириллица).`;
 }

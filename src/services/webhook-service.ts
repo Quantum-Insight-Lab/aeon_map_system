@@ -16,8 +16,8 @@ import {
 import { sendMaxUserMessage } from '../integrations/max/client.js';
 import { mapAnswerToCoordinate } from '../protocol_mapper/map-answer.js';
 import {
-  formatMapperInvalidReplyHtml,
-  formatProtocolQuestionMessageHtml,
+  formatMapperInvalidReplyMarkdown,
+  formatProtocolQuestionMessageMarkdown,
   getProtocolQuestion,
 } from '../protocols/cognitive_v1/questions.js';
 import { PROTOCOL_FIRST_QUESTION_ID, isProtocolQuestionId } from '../protocols/cognitive_v1/queue.js';
@@ -59,12 +59,12 @@ async function openProtocolSessionAndAskGoal1(opts: {
     log.warn(null, 'protocol: goal:1 question def missing');
     return;
   }
-  const bodyHtml = formatProtocolQuestionMessageHtml(qDef);
+  const bodyMd = formatProtocolQuestionMessageMarkdown(qDef);
   const qIns = await insertQuestionAskedProtocol(pool, {
     maxUserId,
     sessionId,
     questionId: PROTOCOL_FIRST_QUESTION_ID,
-    questionText: bodyHtml,
+    questionText: bodyMd,
     cognitiveProtocolVersion: config.cognitiveProtocolVersion,
   });
   if (qIns === 'inserted' && config.maxBotToken) {
@@ -72,8 +72,8 @@ async function openProtocolSessionAndAskGoal1(opts: {
       baseUrl: config.maxApiBaseUrl,
       token: config.maxBotToken,
       userId: maxUserId,
-      text: bodyHtml,
-      format: 'html',
+      text: bodyMd,
+      format: 'markdown',
     });
   } else if (qIns === 'inserted' && !config.maxBotToken) {
     log.warn('MAX_BOT_TOKEN empty: skip outbound first protocol question');
@@ -243,8 +243,8 @@ export async function handleMaxWebhook(opts: {
               baseUrl: config.maxApiBaseUrl,
               token: config.maxBotToken,
               userId: uid,
-              text: formatMapperInvalidReplyHtml(state.questionId),
-              format: 'html',
+              text: formatMapperInvalidReplyMarkdown(state.questionId),
+              format: 'markdown',
             });
           }
           return { duplicate: userIns === 'duplicate', skipped: false };

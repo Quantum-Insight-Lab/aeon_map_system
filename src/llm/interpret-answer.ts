@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Config } from '../config.js';
 import { COGNITIVE_INTERPRET_PROMPT_VERSION } from '../dialog/protocol-constants.js';
 import { loadCognitiveInterpretPrompt } from './load-prompt.js';
+import { openAiChatCompletionUserMessage } from './openai-chat-completion.js';
 
 export type InterpretAnswerResult = {
   interpretationText: string;
@@ -98,31 +99,14 @@ async function callOpenAiChat(opts: {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs);
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
+    const text = await openAiChatCompletionUserMessage({
+      apiKey: opts.apiKey,
+      model: opts.model,
+      userContent: opts.userContent,
       signal: ctrl.signal,
-      headers: {
-        Authorization: `Bearer ${opts.apiKey}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: opts.model,
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: opts.userContent }],
-      }),
+      maxTokens: 1024,
     });
     const latencyMs = Date.now() - t0;
-    const raw = await res.text();
-    if (!res.ok) {
-      throw new Error(`OpenAI ${res.status}: ${raw.slice(0, 500)}`);
-    }
-    const data = JSON.parse(raw) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const text = data.choices?.[0]?.message?.content?.trim() ?? '';
-    if (!text) {
-      throw new Error('OpenAI: пустой ответ');
-    }
     return { text, latencyMs };
   } finally {
     clearTimeout(timer);

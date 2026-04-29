@@ -11,10 +11,9 @@ import { insertLlmCalledAnswerInterpretation } from '../db/llm-events.js';
 import { insertQuestionAskedProtocol } from '../db/session-events.js';
 import { interpretProtocolAnswer } from '../llm/interpret-answer.js';
 import {
-  escapeHtml,
-  formatMapperInvalidReplyHtml,
+  formatMapperInvalidReplyMarkdown,
   formatPriorCoordinatesSummaryForInterpret,
-  formatProtocolQuestionMessageHtml,
+  formatProtocolQuestionMessageMarkdown,
   getProtocolQuestion,
 } from '../protocols/cognitive_v1/questions.js';
 import { nextQuestionAfter } from '../protocols/cognitive_v1/queue.js';
@@ -62,8 +61,8 @@ export async function deliverProtocolStep(opts: {
         baseUrl: config.maxApiBaseUrl,
         token: config.maxBotToken,
         userId: maxUserId,
-        text: formatMapperInvalidReplyHtml(questionId),
-        format: 'html',
+        text: formatMapperInvalidReplyMarkdown(questionId),
+        format: 'markdown',
       });
     } else {
       log.warn('mapper invalid / MAX_BOT_TOKEN empty');
@@ -137,33 +136,31 @@ export async function deliverProtocolStep(opts: {
     return;
   }
 
-  const nextBodyHtml = formatProtocolQuestionMessageHtml(nextDef);
+  const nextBodyMd = formatProtocolQuestionMessageMarkdown(nextDef);
   const qIns = await insertQuestionAskedProtocol(pool, {
     maxUserId,
     sessionId,
     questionId: next,
-    questionText: nextBodyHtml,
+    questionText: nextBodyMd,
     cognitiveProtocolVersion: config.cognitiveProtocolVersion,
   });
 
   if (qIns === 'inserted' && config.maxBotToken) {
     const interpHuman = stripInterpretationForUser(interp.interpretationText);
-    const interpEscaped = escapeHtml(interpHuman).replace(/\n/g, '<br>');
-    if (interpEscaped.trim().length > 0) {
+    if (interpHuman.trim().length > 0) {
       await sendMaxUserMessage({
         baseUrl: config.maxApiBaseUrl,
         token: config.maxBotToken,
         userId: maxUserId,
-        text: interpEscaped,
-        format: 'html',
+        text: interpHuman,
       });
     }
     await sendMaxUserMessage({
       baseUrl: config.maxApiBaseUrl,
       token: config.maxBotToken,
       userId: maxUserId,
-      text: nextBodyHtml,
-      format: 'html',
+      text: nextBodyMd,
+      format: 'markdown',
     });
   } else if (qIns === 'inserted' && !config.maxBotToken) {
     log.warn('MAX_BOT_TOKEN empty: skip protocol step outbound');
