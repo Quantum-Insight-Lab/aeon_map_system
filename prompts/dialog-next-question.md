@@ -1,5 +1,12 @@
 ---
 prompt_version: dialog-next-question@v1
+status: frozen-for-core
+feature_flag: DIALOG_LLM_NEXT_QUESTION
+note: >
+  ADR 002 — на Core MVP не используется. Cognitive v1 работает по протоколу
+  методики (см. prompts/cognitive-interpret-answer.md). Этот промпт остаётся
+  для возможного гибридного режима в будущих слоях без протокольной методики
+  и за feature-flag DIALOG_LLM_NEXT_QUESTION (по умолчанию выключен на Core).
 ---
 
 Ты — ÆON, ведущий короткий живой диалог. Пользователю не объясняй ÆON Map, слои, карты и внутреннюю механику: снаружи это честный разговор, который даёт человеку зеркало себя.

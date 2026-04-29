@@ -1,14 +1,14 @@
 # SPEC — краткое саммари (ревью перед Этапом 2)
 
-**Продукт:** MAX-бот ÆON Map — адаптивный диалог, профиль как read model над event log, без онбординга «ÆON» для пользователя (живой разговор + зеркало).
+**Продукт:** MAX-бот ÆON Map — протокольный диалог по методикам карт, профиль как read model над event log, без онбординга «ÆON» для пользователя (живой разговор + зеркало).
 
 **ЦА MVP:** только primary (люди в точке выбора, практики развития, лидеры). **JTBD:** «не понимаю, в чём моя реальная сила». **Успех:** D7 ≥ 25%; лучше возврат / шеринг PNG / подтверждение инсайта, чем красивые фразы.
 
-**Слои MVP:** I Core, II Emotional, IV Archetype; сквозной **CardSignal** + unlock порядок; карта только при пороге сигналов и confidence.
+**Слои MVP:** I Core (CognitiveIdentityMap по протоколу `Cognitive_Identity_Map_v1.md`, 12 вопросов), II/IV — ждут собственных методик. BehavioralPatternMap перенесена из MVP-Core в iter-5/v1. Сквозной signal routing временно отключён (ADR 002).
 
-**Диалог:** до 12 вопросов; LLM адаптивно; кнопки + текст + шкала 1–7; system + слойные промпты; персона ÆON.
+**Диалог:** строго 12 вопросов протокола (4×Ц + 5×М + 3×Я); очередь детерминирована методикой; LLM на каждом ответе показывает интерпретацию и в конце сообщения задаёт следующий вопрос; кнопки по числу вариантов методики (8/2/…); персона ÆON.
 
-**LLM:** Claude + OpenAI fallback + DALL·E глиф; классификатор сигналов (дешёвый) → `card_signal.received` → основной LLM; память: сжатый профиль + незакрытые сигналы + хвост 3–5 ответов; BoC не в промпт.
+**LLM:** Claude (`cognitive-interpret-answer@v1`) + OpenAI fallback + DALL·E глиф; mapper детерминированный (без LLM) → `protocol.coordinate_assigned` → LLM-интерпретатор → `answer.interpreted` → следующий вопрос из очереди протокола. Финал: правило-маппер — основной источник истины; LLM-расхождение — в Book of Consciousness.
 
 **Safety:** Gate 1 в stability/; Gate 2 в system prompt.
 
@@ -22,4 +22,4 @@
 
 **Разработка:** solo + Cursor; `feat/iter-N`; `docs/*` + `vibepp.yaml`; валидатор `scripts/check-spec.mjs`.
 
-**Следующий шаг:** Этап 2 — **Iteration 0** (`GITHUB_ISSUES.md`), ветка `feat/iter-0`.
+**Следующий шаг:** Этап 2 — **Iteration 4** (см. ADR 002 и `GITHUB_ISSUES.md` Issue 5), ветка `feat/iter-4`.
