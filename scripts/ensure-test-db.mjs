@@ -5,7 +5,7 @@
  */
 import pg from 'pg';
 
-/** Держи в синхроне с vitest.config.ts (default TEST_DATABASE_URL). */
+/** Fallback для локального запуска; переопределяется через TEST_DATABASE_URL (Vitest больше не подставляет URL по умолчанию). */
 const FALLBACK_TEST_URL = 'postgres://aeon:aeon@127.0.0.1:5433/aeon_test';
 
 const rawUrl = process.env.TEST_DATABASE_URL ?? FALLBACK_TEST_URL;

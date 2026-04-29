@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CORE_FIRST_QUESTION_ID } from '../src/dialog/constants.js';
+import { PROTOCOL_FIRST_QUESTION_ID } from '../src/protocols/cognitive_v1/queue.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { insertEvent } from '../src/db/insert-event.js';
 import { handleMaxWebhook } from '../src/services/webhook-service.js';
@@ -16,7 +16,14 @@ function mockLlmFetch(): void {
       const url = String(input);
       if (url.includes('api.anthropic.com')) {
         return new Response(
-          JSON.stringify({ content: [{ type: 'text', text: 'Следующий вопрос от тестового LLM?' }] }),
+          JSON.stringify({
+            content: [
+              {
+                type: 'text',
+                text: 'Интерпретация ответа пользователя.\n{"axis":"goal","coordinate":"Истина"}',
+              },
+            ],
+          }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         );
       }
@@ -49,6 +56,10 @@ describe.skipIf(!dsn)('event store (integration)', () => {
     openaiTextModel: 'gpt-test',
     llmTimeoutMs: 5000,
     llmFollowupCount: 5,
+    dialogLlmNextQuestion: false,
+    cognitiveProtocolVersion: 'v1',
+    cardConfidenceThreshold: 0.55,
+    llmRuleAgreementThreshold: 0.7,
   };
 
   const log = {
@@ -156,7 +167,7 @@ describe.skipIf(!dsn)('event store (integration)', () => {
       timestamp: 2,
       message: {
         timestamp: 2,
-        body: { mid: 'mid-iter2-b', text: 'мой ответ' },
+        body: { mid: 'mid-iter2-b', text: '1' },
         sender: { user_id: 9101, is_bot: false },
       },
     };
@@ -170,13 +181,15 @@ describe.skipIf(!dsn)('event store (integration)', () => {
       'session.opened',
       'question.asked',
       'answer.given',
+      'protocol.coordinate_assigned',
       'llm.called',
+      'answer.interpreted',
       'question.asked',
     ]);
     const ans = await pool.query<{ answer_value: string }>(
       `SELECT payload->>'answer_value' AS answer_value FROM events WHERE event_type = 'answer.given'`,
     );
-    expect(ans.rows[0].answer_value).toBe('мой ответ');
+    expect(ans.rows[0].answer_value).toBe('1');
   });
 
   it('iter-2: duplicate answer webhook does not duplicate answer.given', async () => {
@@ -221,7 +234,7 @@ describe.skipIf(!dsn)('event store (integration)', () => {
     expect(c.rows[0].c).toBe('0');
     const q = await pool.query<{ c: string }>(
       `SELECT count(*)::text AS c FROM events WHERE event_type = 'question.asked' AND payload->>'question_id' = $1`,
-      [CORE_FIRST_QUESTION_ID],
+      [PROTOCOL_FIRST_QUESTION_ID],
     );
     expect(q.rows[0].c).toBe('1');
   });

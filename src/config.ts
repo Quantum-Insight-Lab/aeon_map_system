@@ -5,10 +5,20 @@ export type Config = {
   maxWebhookSecret: string;
   maxApiBaseUrl: string;
   logLevel: string;
-  /** Статичный первый вопрос Core (iter-2). */
+  /**
+   * Статичный первый вопрос Core (iter-2).
+   * @deprecated iter-4+: активный первый вопрос — протокол goal:1; поле оставлено для совместимости env.
+   */
   firstCoreQuestionText: string;
-  /** Короткое подтверждение после answer.given на core:first. */
+  /** Короткое подтверждение после answer.given на первом шаге протокола (goal:1). */
   dialogAnswerAckText: string;
+  /** iter-3 LLM-цепочка после legacy core:first (не используется при протоколе v1). Default false. */
+  dialogLlmNextQuestion: boolean;
+  cognitiveProtocolVersion: string;
+  /** INV-03: минимальная уверенность для имени типа на карте. */
+  cardConfidenceThreshold: number;
+  /** Порог доли совпадений mapper vs LLM для флага disagreement_with_llm. */
+  llmRuleAgreementThreshold: number;
   anthropicApiKey: string;
   anthropicModel: string;
   openaiApiKey: string;
@@ -37,5 +47,9 @@ export function loadConfig(): Config {
     openaiTextModel: process.env.OPENAI_TEXT_MODEL ?? 'gpt-4o-mini',
     llmTimeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? 45_000),
     llmFollowupCount: Number(process.env.LLM_FOLLOWUP_COUNT ?? 5),
+    dialogLlmNextQuestion: process.env.DIALOG_LLM_NEXT_QUESTION === 'true',
+    cognitiveProtocolVersion: process.env.COGNITIVE_PROTOCOL_VERSION ?? 'v1',
+    cardConfidenceThreshold: Number(process.env.CARD_CONFIDENCE_THRESHOLD ?? '0.55'),
+    llmRuleAgreementThreshold: Number(process.env.LLM_RULE_AGREEMENT_THRESHOLD ?? '0.7'),
   };
 }

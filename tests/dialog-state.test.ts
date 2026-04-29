@@ -9,7 +9,7 @@ function row(type: string, payload: Record<string, unknown>): DialogEventRow {
 describe('inferDialogState', () => {
   it('needs_first_question after user.started only', () => {
     const events: DialogEventRow[] = [row('user.started', { max_user_id: 1 })];
-    expect(inferDialogState(events)).toEqual({ type: 'needs_first_question' });
+    expect(inferDialogState(events, { dialogLlmNextQuestion: true })).toEqual({ type: 'needs_first_question' });
   });
 
   it('awaiting_answer after session.opened + question.asked for core:first', () => {
@@ -27,7 +27,7 @@ describe('inferDialogState', () => {
         max_user_id: 1,
       }),
     ];
-    expect(inferDialogState(events)).toEqual({
+    expect(inferDialogState(events, { dialogLlmNextQuestion: true })).toEqual({
       type: 'awaiting_answer',
       sessionId: sid,
       questionId: CORE_FIRST_QUESTION_ID,
@@ -51,7 +51,7 @@ describe('inferDialogState', () => {
         max_user_id: 1,
       }),
     ];
-    expect(inferDialogState(events)).toEqual({
+    expect(inferDialogState(events, { dialogLlmNextQuestion: true })).toEqual({
       type: 'needs_next_llm',
       sessionId: sid,
       lastAnswerQuestionId: CORE_FIRST_QUESTION_ID,
@@ -80,7 +80,7 @@ describe('inferDialogState', () => {
         max_user_id: 1,
       }),
     ];
-    expect(inferDialogState(events)).toEqual({
+    expect(inferDialogState(events, { dialogLlmNextQuestion: true })).toEqual({
       type: 'awaiting_answer',
       sessionId: sid,
       questionId: q1,
@@ -98,7 +98,7 @@ describe('inferDialogState', () => {
       row('question.asked', { session_id: sid, question_id: coreLlmQuestionId(1), max_user_id: 1 }),
       row('answer.given', { session_id: sid, question_id: coreLlmQuestionId(1), max_user_id: 1 }),
     ];
-    expect(inferDialogState(events)).toEqual({
+    expect(inferDialogState(events, { dialogLlmNextQuestion: true })).toEqual({
       type: 'needs_next_llm',
       sessionId: sid,
       lastAnswerQuestionId: coreLlmQuestionId(1),
@@ -128,7 +128,7 @@ describe('inferDialogState', () => {
         max_user_id: 2,
       }),
     ];
-    expect(inferDialogState(events)).toEqual({
+    expect(inferDialogState(events, { dialogLlmNextQuestion: true })).toEqual({
       type: 'awaiting_answer',
       sessionId: sid,
       questionId: CORE_FIRST_QUESTION_ID,
