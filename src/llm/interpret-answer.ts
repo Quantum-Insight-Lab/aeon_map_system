@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { Config } from '../config.js';
 import { COGNITIVE_INTERPRET_PROMPT_VERSION } from '../dialog/protocol-constants.js';
+import type { DomainLogger } from '../util/domain-log.js';
+import { dbg } from '../util/domain-log.js';
 import { loadCognitiveInterpretPrompt } from './load-prompt.js';
 import { openAiChatCompletionUserMessage } from './openai-chat-completion.js';
 
@@ -121,10 +123,7 @@ export async function interpretProtocolAnswer(opts: {
   mappedAxis: string;
   mappedCoordinate: string;
   priorCoordinatesSummary: string;
-  log: {
-    warn: (o: unknown, msg?: string) => void;
-    info: (o: unknown, msg?: string) => void;
-  };
+  log: DomainLogger;
 }): Promise<InterpretAnswerResult> {
   const {
     config,
@@ -167,6 +166,13 @@ export async function interpretProtocolAnswer(opts: {
 
   if (config.anthropicApiKey) {
     try {
+      dbg(log, 'dialog.llm.call', {
+        purpose: 'answer_interpretation',
+        provider: 'anthropic',
+        model: config.anthropicModel,
+        questionId,
+        sessionId,
+      });
       const { text, latencyMs } = await callAnthropic({
         apiKey: config.anthropicApiKey,
         model: config.anthropicModel,
@@ -183,6 +189,13 @@ export async function interpretProtocolAnswer(opts: {
 
   if (config.openaiApiKey) {
     log.info({ metric: 'interpret_fallback_openai' }, 'interpret: fallback OpenAI');
+    dbg(log, 'dialog.llm.call', {
+      purpose: 'answer_interpretation',
+      provider: 'openai',
+      model: config.openaiTextModel,
+      questionId,
+      sessionId,
+    });
     const { text, latencyMs } = await callOpenAiChat({
       apiKey: config.openaiApiKey,
       model: config.openaiTextModel,

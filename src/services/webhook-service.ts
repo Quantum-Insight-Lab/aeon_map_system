@@ -4,6 +4,7 @@ import { CORE_FIRST_QUESTION_ID } from '../dialog/constants.js';
 import { deliverCardComputed } from '../dialog/deliver-card-computed.js';
 import { deliverNextLlmQuestion } from '../dialog/deliver-next-llm.js';
 import { deliverProtocolStep, sendProtocolQuestionAfterContinue } from '../dialog/deliver-protocol-step.js';
+import { runProtocolAnswerPipeline } from '../dialog/run-protocol-answer-pipeline.js';
 import { inferDialogState, type DialogEventRow, type DialogState } from '../dialog/resolve-state.js';
 import { fetchDialogEventsForUser } from '../db/dialog-events.js';
 import { insertUserStarted } from '../db/events.js';
@@ -16,17 +17,22 @@ import {
 import { answerMaxCallback, sendMaxUserMessage } from '../integrations/max/client.js';
 import {
   PROTOCOL_CONTINUE_CALLBACK_PAYLOAD,
+  parseProtocolAnswerPayload,
   protocolContinueKeyboardAttachment,
 } from '../integrations/max/keyboard.js';
-import { mapAnswerToCoordinate } from '../protocol_mapper/map-answer.js';
-import { formatMapperInvalidReplyMarkdown, getProtocolQuestion } from '../protocols/cognitive_v1/questions.js';
-import { PROTOCOL_FIRST_QUESTION_ID, isProtocolQuestionId } from '../protocols/cognitive_v1/queue.js';
+import { getProtocolQuestion } from '../protocols/cognitive_v1/questions.js';
+import {
+  PROTOCOL_FIRST_QUESTION_ID,
+  PROTOCOL_QUESTION_IDS,
+  isProtocolQuestionId,
+} from '../protocols/cognitive_v1/queue.js';
 import type {
   BotStartedUpdate,
   MaxUpdate,
   MessageCallbackUpdate,
   MessageCreatedUpdate,
 } from '../integrations/max/types.js';
+import type { DomainLogger } from '../util/domain-log.js';
 import { resolveMaxUpdateId } from '../integrations/max/update-id.js';
 
 function isMessageCallbackUpdate(u: MaxUpdate): u is MessageCallbackUpdate {
@@ -53,7 +59,7 @@ async function openProtocolSessionAndAskGoal1(opts: {
   config: Config;
   maxUserId: number;
   openingMessageMid: string | null;
-  log: { warn: (o: unknown, msg?: string) => void };
+  log: DomainLogger;
 }): Promise<void> {
   const { pool, config, maxUserId, openingMessageMid, log } = opts;
   const candidate = newSessionId();
@@ -94,7 +100,7 @@ async function recoverProtocolFromState(opts: {
   maxUserId: number;
   state: Extract<DialogState, { type: 'needs_next_protocol_step' }>;
   rows: DialogEventRow[];
-  log: { warn: (o: unknown, msg?: string) => void; info: (o: unknown, msg?: string) => void };
+  log: DomainLogger;
 }): Promise<void> {
   const { pool, config, maxUserId, state, rows, log } = opts;
   const ansRow = [...rows]
@@ -127,7 +133,7 @@ export async function handleMaxWebhook(opts: {
   config: Config;
   pool: Pool;
   update: MaxUpdate;
-  log: { warn: (o: unknown, msg?: string) => void; info: (o: unknown, msg?: string) => void };
+  log: DomainLogger;
 }): Promise<{ duplicate: boolean; skipped: boolean }> {
   const { config, pool, update, log } = opts;
 
@@ -150,8 +156,9 @@ export async function handleMaxWebhook(opts: {
     const uid = update.callback.user?.user_id ?? update.message?.sender?.user_id;
     if (uid != null) {
       const payload = update.callback.payload ?? '';
-      const rows = await fetchDialogEventsForUser(pool, uid);
-      const state = inferDialogState(rows, inferOpts(config));
+      let rows = await fetchDialogEventsForUser(pool, uid);
+      let state = inferDialogState(rows, inferOpts(config));
+
       if (
         payload === PROTOCOL_CONTINUE_CALLBACK_PAYLOAD &&
         state.type === 'awaiting_continue' &&
@@ -165,6 +172,37 @@ export async function handleMaxWebhook(opts: {
           questionId: state.questionId,
           log,
         });
+      } else {
+        const pa = parseProtocolAnswerPayload(payload);
+        if (pa != null) {
+          rows = await fetchDialogEventsForUser(pool, uid);
+          state = inferDialogState(rows, inferOpts(config));
+          const qid = PROTOCOL_QUESTION_IDS[pa.questionIndex];
+          const qMeta = qid ? getProtocolQuestion(qid) : undefined;
+          const variantOk = qMeta?.variants.some((v) => v.key === pa.variantKey) ?? false;
+          if (
+            variantOk &&
+            qid &&
+            state.type === 'awaiting_answer' &&
+            state.questionId === qid
+          ) {
+            const maxCbId = resolveMaxUpdateId(update);
+            if (maxCbId) {
+              await runProtocolAnswerPipeline({
+                pool,
+                config,
+                maxUserId: uid,
+                sessionId: state.sessionId,
+                questionId: qid,
+                answerText: pa.variantKey,
+                maxUpdateId: maxCbId,
+                answerType: 'callback',
+                inferOpts: inferOpts(config),
+                log,
+              });
+            }
+          }
+        }
       }
     }
 
@@ -298,62 +336,18 @@ export async function handleMaxWebhook(opts: {
       const text = m.body?.text ?? '';
 
       if (isProtocolQuestionId(state.questionId)) {
-        const mapped = mapAnswerToCoordinate(state.questionId, text);
-        if (!mapped.ok) {
-          if (config.maxBotToken) {
-            await sendMaxUserMessage({
-              baseUrl: config.maxApiBaseUrl,
-              token: config.maxBotToken,
-              userId: uid,
-              text: formatMapperInvalidReplyMarkdown(state.questionId),
-              format: 'markdown',
-            });
-          }
-          return { duplicate: userIns === 'duplicate', skipped: false };
-        }
-
-        const ansIns = await insertAnswerGiven(pool, {
+        await runProtocolAnswerPipeline({
+          pool,
+          config,
           maxUserId: uid,
           sessionId: state.sessionId,
           questionId: state.questionId,
-          answerValue: text,
-          answerType: 'text',
+          answerText: text,
           maxUpdateId,
+          answerType: 'text',
+          inferOpts: inferOpts(config),
+          log,
         });
-
-        if (ansIns.inserted && state.questionId === PROTOCOL_FIRST_QUESTION_ID && config.maxBotToken) {
-          await sendMaxUserMessage({
-            baseUrl: config.maxApiBaseUrl,
-            token: config.maxBotToken,
-            userId: uid,
-            text: config.dialogAnswerAckText,
-          });
-        } else if (ansIns.inserted && state.questionId === PROTOCOL_FIRST_QUESTION_ID && !config.maxBotToken) {
-          log.warn('MAX_BOT_TOKEN empty: skip answer ack');
-        }
-
-        if (ansIns.inserted) {
-          await deliverProtocolStep({
-            pool,
-            config,
-            maxUserId: uid,
-            sessionId: state.sessionId,
-            questionId: state.questionId,
-            answerText: text,
-            answerEventId: ansIns.eventId,
-            preMapped: mapped,
-            log,
-          });
-        }
-
-        if (ansIns.inserted) {
-          rows = await fetchDialogEventsForUser(pool, uid);
-          state = inferDialogState(rows, inferOpts(config));
-          if (state.type === 'needs_next_llm' && config.dialogLlmNextQuestion) {
-            await deliverNextLlmQuestion({ pool, config, maxUserId: uid, state, log });
-          }
-        }
-
         return { duplicate: userIns === 'duplicate', skipped: false };
       }
 

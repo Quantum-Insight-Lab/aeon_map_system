@@ -3,6 +3,8 @@ import type { Pool } from 'pg';
 import type { Config } from '../config.js';
 import type { MaxUpdate } from '../integrations/max/types.js';
 import { handleMaxWebhook } from '../services/webhook-service.js';
+import type { DomainLogger } from '../util/domain-log.js';
+import { dbg } from '../util/domain-log.js';
 
 export const webhookRoutes: FastifyPluginAsync<{
   config: Config;
@@ -19,12 +21,16 @@ export const webhookRoutes: FastifyPluginAsync<{
     }
 
     const update = req.body as MaxUpdate;
+    dbg(req.log as DomainLogger, 'max.webhook.update', {
+      update_type: update.update_type,
+      hint: 'строки req/res сервера — уровень info (30); детали — ключи dialog.* при LOG_LEVEL=debug',
+    });
     try {
       const result = await handleMaxWebhook({
         config,
         pool,
         update,
-        log: app.log,
+        log: req.log as DomainLogger,
       });
       return reply.send({ ok: true, ...result });
     } catch (e) {

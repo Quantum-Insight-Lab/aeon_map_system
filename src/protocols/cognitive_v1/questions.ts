@@ -1,8 +1,8 @@
-import type { CognitiveAxis } from './types.js';
+import { ANCHOR_LETTERS_ORDER, type CognitiveAxis } from './types.js';
 import type { ProtocolQuestionId } from './queue.js';
 
 export type ProtocolVariant = {
-  /** Ключ для mapper: 1–8 или буква оси. */
+  /** Ключ для mapper: для цели — 1–8; для якоря — буква А–З; для модальности — А/Б/М. */
   key: string;
   /** Строка варианта для пользователя. */
   text: string;
@@ -79,7 +79,7 @@ function modalityVariants(a: string, b: string, mid: string): readonly ProtocolV
 }
 
 function anchorVariants(lines: readonly string[]): readonly ProtocolVariant[] {
-  return lines.map((line, i) => ({ key: String(i + 1), text: line }));
+  return lines.map((line, i) => ({ key: ANCHOR_LETTERS_ORDER[i]!, text: line }));
 }
 
 const Я1_LINES = [
@@ -256,7 +256,7 @@ export function formatProtocolQuestionForInterpretPrompt(q: ProtocolQuestion): s
       ? 'Ожидаемый формат ответа пользователя: одна цифра от 1 до 8 (номер пункта).'
       : q.axis === 'modality'
         ? 'Ожидаемый формат ответа пользователя: одна буква А, Б или М (латиница A, B, M допустима).'
-        : 'Ожидаемый формат ответа пользователя: одна цифра от 1 до 8 (номер строки якоря).';
+        : 'Ожидаемый формат ответа пользователя: одна кириллическая буква от А до З (как у подписи к строке).';
   const variantsBlock =
     q.axis === 'goal' || q.axis === 'anchor'
       ? q.variants.map((v) => `${v.key}. ${v.text}`).join('\n')
@@ -338,7 +338,7 @@ export function formatProtocolQuestionMessageHtml(q: ProtocolQuestion): string {
     const footer =
       q.axis === 'goal'
         ? `<i>Ответь <b>одной цифрой</b> — номер подходящего пункта от <b>1</b> до <b>8</b> (например: <b>6</b>). Полный текст без номера не принимается.</i>`
-        : `<i>Ответь <b>одной цифрой</b> — номер подходящей строки от <b>1</b> до <b>8</b> (например: <b>3</b>). Полный текст без номера не принимается.</i>`;
+        : `<i>Ответь <b>одной буквой</b> — одна из <b>А</b>–<b>З</b>, как у подходящей строки (например: <b>В</b>). Полный текст без буквы не принимается.</i>`;
     return `${stemHtml}${PAR}<b>Варианты:</b>${PAR}${variantsHtml}${PAR}${footer}`;
   }
 
@@ -380,7 +380,7 @@ export function formatProtocolQuestionMessageMarkdown(q: ProtocolQuestion): stri
     const footer =
       q.axis === 'goal'
         ? `**Ответь одной цифрой** — номер подходящего пункта от **1** до **8** (например: **6**). _Полный текст без номера не принимается._`
-        : `**Ответь одной цифрой** — номер подходящей строки от **1** до **8** (например: **3**). _Полный текст без номера не принимается._`;
+        : `**Ответь одной буквой** — одна из **А**–**З**, как у подходящей строки (например: **В**). _Полный текст без буквы не принимается._`;
     return `${stemMd}\n\n**Варианты:**\n\n${variantsMd}\n\n${footer}`;
   }
   if (q.axis === 'modality') {
@@ -403,7 +403,7 @@ export function formatMapperInvalidReplyHtml(questionId: string): string {
   if (q.axis === 'modality') {
     return `<b>Не распознал ответ.</b>${PAR}Ответь одной буквой: <b>А</b>, <b>Б</b> или <b>М</b>.`;
   }
-  return `<b>Не распознал ответ.</b>${PAR}Нужна <b>одна цифра от 1 до 8</b> — номер строки якоря (например: <b>3</b>).`;
+  return `<b>Не распознал ответ.</b>${PAR}Нужна <b>одна буква от А до З</b> — буква строки якоря (например: <b>В</b>).`;
 }
 
 /** То же для отправки с format=markdown. */
@@ -418,5 +418,5 @@ export function formatMapperInvalidReplyMarkdown(questionId: string): string {
   if (q.axis === 'modality') {
     return `**Не распознал ответ.**\n\nОтветь одной буквой: **А**, **Б** или **М**.`;
   }
-  return `**Не распознал ответ.**\n\nНужна **одна цифра от 1 до 8** — номер строки якоря (например: **3**).`;
+  return `**Не распознал ответ.**\n\nНужна **одна буква от А до З** — буква строки якоря (например: **В**).`;
 }

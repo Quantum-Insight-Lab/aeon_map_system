@@ -2,7 +2,6 @@ import { COGNITIVE_PROTOCOL_QUESTIONS } from '../protocols/cognitive_v1/question
 import type { CognitiveAxis } from '../protocols/cognitive_v1/types.js';
 import {
   GOAL_LABELS,
-  ANCHOR_LETTERS_ORDER,
   type GoalLabel,
   type ModalityLetter,
   type AnchorLetter,
@@ -11,7 +10,7 @@ import { isProtocolQuestionId } from '../protocols/cognitive_v1/queue.js';
 
 export type MappedCoordinate = {
   axis: CognitiveAxis;
-  /** Для anchor — буква А–З (внутренняя координата); пользователь вводит цифру 1–8 или по желанию букву. */
+  /** Для anchor — буква А–З (координата совпадает с ключом варианта в протоколе). */
   coordinate: string;
 };
 
@@ -49,6 +48,7 @@ function latinToCyrillicAnchor(ch: string): string | null {
   return null;
 }
 
+/** Цифра 1–8 → русское название цели из методики. */
 function parseGoalDigit(raw: string): GoalLabel | null {
   const t = normalizeWhitespace(raw);
   const digitMatch = t.match(/[1-8]/);
@@ -67,17 +67,6 @@ function parseModality(raw: string): ModalityLetter | null {
   const lat = latinToCyrillicModality(first);
   if (lat === 'А' || lat === 'Б' || lat === 'М') return lat;
   return null;
-}
-
-/** Цифра 1–8 → буква якоря (А…З); иначе разбор по букве как раньше. */
-function parseAnchorDigit(raw: string): AnchorLetter | null {
-  const t = normalizeWhitespace(raw);
-  const digitMatch = t.match(/[1-8]/);
-  if (!digitMatch) {
-    return null;
-  }
-  const n = Number(digitMatch[0]);
-  return ANCHOR_LETTERS_ORDER[n - 1] ?? null;
 }
 
 function parseAnchorLetter(raw: string): AnchorLetter | null {
@@ -127,7 +116,7 @@ export function mapAnswerToCoordinate(questionId: string, raw: string): MapAnswe
       return { ok: true, axis: 'modality', coordinate: m };
     }
     case 'anchor': {
-      const a = parseAnchorDigit(raw) ?? parseAnchorLetter(raw);
+      const a = parseAnchorLetter(raw);
       if (!a) {
         return { ok: false, reason: 'invalid_anchor_answer' };
       }

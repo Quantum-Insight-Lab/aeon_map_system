@@ -13,12 +13,14 @@ import type { ModalityLetter } from '../protocols/cognitive_v1/types.js';
 import { PROTOCOL_QUESTION_IDS, protocolQuestionIndex } from '../protocols/cognitive_v1/queue.js';
 import { fetchDialogEventsForUser } from '../db/dialog-events.js';
 import { insertCardComputed } from '../db/aeon-events.js';
+import { sendMaxUserMessage } from '../integrations/max/client.js';
 import {
   COGNITIVE_CARD_COMPUTED_VERSION,
   COGNITIVE_CARD_TYPE,
   COGNITIVE_PROTOCOL_VERSION,
 } from './protocol-constants.js';
-import { sendMaxUserMessage } from '../integrations/max/client.js';
+import type { DomainLogger } from '../util/domain-log.js';
+import { dbg } from '../util/domain-log.js';
 
 function coordsPayload(coords: ReturnType<typeof assembleCoordinates>): Record<string, unknown> {
   return {
@@ -36,7 +38,7 @@ export async function deliverCardComputed(opts: {
   config: Config;
   maxUserId: number;
   sessionId: string;
-  log: { warn: (o: unknown, msg?: string) => void; info: (o: unknown, msg?: string) => void };
+  log: DomainLogger;
 }): Promise<void> {
   const { pool, config, maxUserId, sessionId, log } = opts;
   const rows = await fetchDialogEventsForUser(pool, maxUserId);
@@ -105,6 +107,16 @@ export async function deliverCardComputed(opts: {
   }
 
   const disagreementWithLlm = agreement < config.llmRuleAgreementThreshold;
+
+  dbg(log, 'dialog.card.compute', {
+    sessionId,
+    maxUserId,
+    confidence,
+    agreement,
+    matchedTypes: matched.matchedTypes.map((t) => t.name),
+    disagreementWithLlm,
+    coreUnformedPreview: assembled.coreFormation === 'unformed' || assembled.primaryGoal == null,
+  });
 
   let matchedNames = matched.matchedTypes.map((t) => t.name);
   let coreUnformed = assembled.coreFormation === 'unformed' || assembled.primaryGoal == null;

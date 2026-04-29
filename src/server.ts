@@ -13,6 +13,15 @@ async function main(): Promise<void> {
   await runMigrations(pool);
 
   const app = await buildApp({ config, pool });
+  app.log.info(
+    {
+      LOG_LEVEL: config.logLevel,
+      note:
+        'Строки «incoming request» у Fastify — всегда info (≈30). Детали: ключи max.webhook.update и dialog.* на уровне debug (≈20), только если LOG_LEVEL=debug и переменная реально загружена (npm run dev / node --env-file=.env …)',
+    },
+    'server.logging',
+  );
+  app.log.debug({ probe: true }, 'server.logging.debug_probe');
   await app.listen({ host: '0.0.0.0', port: config.port });
 }
 

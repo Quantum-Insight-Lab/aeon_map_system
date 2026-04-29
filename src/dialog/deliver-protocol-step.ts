@@ -19,8 +19,12 @@ import {
 import { nextQuestionAfter, type ProtocolQuestionId } from '../protocols/cognitive_v1/queue.js';
 import { COGNITIVE_CARD_TYPE } from './protocol-constants.js';
 import { sendMaxUserMessage } from '../integrations/max/client.js';
-import { protocolContinueKeyboardAttachment } from '../integrations/max/keyboard.js';
+import {
+  protocolContinueKeyboardAttachment,
+  protocolQuestionKeyboardAttachment,
+} from '../integrations/max/keyboard.js';
 import { deliverCardComputed } from './deliver-card-computed.js';
+import { dbg, type DomainLogger } from '../util/domain-log.js';
 
 /** Убирает JSON-хвост и типичные markdown-fences вокруг JSON — пользователь видит только прозу. */
 function stripInterpretationForUser(text: string): string {
@@ -51,7 +55,7 @@ export async function deliverProtocolStep(opts: {
   answerEventId: string;
   /** Если передан (валидный mapper из webhook), повторный разбор текста не делается. */
   preMapped?: MapAnswerOk;
-  log: { warn: (o: unknown, msg?: string) => void; info: (o: unknown, msg?: string) => void };
+  log: DomainLogger;
 }): Promise<void> {
   const { pool, config, maxUserId, sessionId, questionId, answerText, answerEventId, log } = opts;
 
@@ -82,11 +86,23 @@ export async function deliverProtocolStep(opts: {
     sourceQuestionId: questionId,
   });
 
+  dbg(log, 'dialog.protocol.mapper_coordinate', {
+    sessionId,
+    questionId,
+    axis: mapped.axis,
+    coordinate: mapped.coordinate,
+  });
+
   const priorRows = await fetchProtocolCoordinatesPriorToQuestion(pool, sessionId, questionId);
   const priorSummary = formatPriorCoordinatesSummaryForInterpret(priorRows);
 
   let interp;
   try {
+    dbg(log, 'dialog.llm.interpret_start', {
+      sessionId,
+      questionId,
+      purpose: 'answer_interpretation',
+    });
     interp = await interpretProtocolAnswer({
       config,
       sessionId,
@@ -96,6 +112,13 @@ export async function deliverProtocolStep(opts: {
       mappedCoordinate: mapped.coordinate,
       priorCoordinatesSummary: priorSummary,
       log,
+    });
+    dbg(log, 'dialog.llm.interpret_done', {
+      sessionId,
+      questionId,
+      provider: interp.provider,
+      model: interp.model,
+      latencyMs: interp.latencyMs,
     });
   } catch (e) {
     log.warn({ err: e }, 'deliverProtocolStep: interpret failed');
@@ -175,7 +198,7 @@ export async function sendProtocolQuestionAfterContinue(opts: {
   maxUserId: number;
   sessionId: string;
   questionId: ProtocolQuestionId;
-  log: { warn: (o: unknown, msg?: string) => void };
+  log: DomainLogger;
 }): Promise<void> {
   const { pool, config, maxUserId, sessionId, questionId, log } = opts;
   const qDef = getProtocolQuestion(questionId);
@@ -192,12 +215,14 @@ export async function sendProtocolQuestionAfterContinue(opts: {
     cognitiveProtocolVersion: config.cognitiveProtocolVersion,
   });
   if (qIns === 'inserted' && config.maxBotToken) {
+    dbg(log, 'dialog.protocol.question_sent', { sessionId, questionId });
     await sendMaxUserMessage({
       baseUrl: config.maxApiBaseUrl,
       token: config.maxBotToken,
       userId: maxUserId,
       text: bodyMd,
       format: 'markdown',
+      attachments: [protocolQuestionKeyboardAttachment(qDef)],
     });
   } else if (qIns === 'inserted' && !config.maxBotToken) {
     log.warn('MAX_BOT_TOKEN empty: skip protocol question reveal');

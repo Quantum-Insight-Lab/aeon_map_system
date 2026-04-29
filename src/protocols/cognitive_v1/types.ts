@@ -21,7 +21,7 @@ export type ModalityLetter = 'А' | 'Б' | 'М';
 /** Якорь: буквы Я1–Я3 (кириллица А–З). */
 export type AnchorLetter = 'А' | 'Б' | 'В' | 'Г' | 'Д' | 'Е' | 'Ж' | 'З';
 
-/** Порядок строк якоря в протоколе: цифра ответа 1→А … 8→З (coordinate всё ещё буква). */
+/** Порядок строк якоря в протоколе (ключ варианта = буква; coordinate — та же буква). */
 export const ANCHOR_LETTERS_ORDER: readonly AnchorLetter[] = ['А', 'Б', 'В', 'Г', 'Д', 'Е', 'Ж', 'З'];
 
 export const ANCHOR_LABEL_BY_LETTER: Record<AnchorLetter, string> = {
