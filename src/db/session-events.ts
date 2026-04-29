@@ -117,6 +117,32 @@ export async function insertAnswerGiven(
   });
 }
 
+/** Показана только кнопка «Продолжить»; текст вопроса уйдёт после callback (до `question.asked`). */
+export async function insertProtocolContinueOffered(
+  pool: Pool,
+  params: {
+    maxUserId: number;
+    sessionId: string;
+    questionId: ProtocolQuestionId;
+    cognitiveProtocolVersion: string;
+  },
+): Promise<'inserted' | 'duplicate'> {
+  return insertEvent(pool, {
+    eventType: 'protocol.continue_offered',
+    actor: { id: 'aeon-max-bot', role: 'service' },
+    subject: { entity: 'session', id: params.sessionId },
+    payload: {
+      session_id: params.sessionId,
+      question_id: params.questionId,
+      max_user_id: params.maxUserId,
+      cognitive_protocol_version: params.cognitiveProtocolVersion,
+    },
+    idempotencyKey: `protocol.continue_offered:v1:${params.questionId}:${params.sessionId}`,
+    schemaVersion: 1,
+    correlationId: params.sessionId,
+  });
+}
+
 /** Вопрос протокола Cognitive v1 (без llm_call_id). */
 export async function insertQuestionAskedProtocol(
   pool: Pool,

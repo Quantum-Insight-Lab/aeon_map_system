@@ -337,6 +337,10 @@ events:
       trigger: "бот открыл новую сессию"
       payload: [session_id, layer, question_count_plan]
 
+    - type: protocol.continue_offered
+      trigger: "показана только кнопка «Продолжить»; текст протокольного вопроса — после callback"
+      payload: [session_id, question_id, max_user_id, cognitive_protocol_version]
+
     - type: question.asked
       trigger: "бот отправил вопрос пользователю"
       payload: [session_id, question_id, question_text, layer, llm_call_id]

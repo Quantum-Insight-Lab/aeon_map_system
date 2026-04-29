@@ -38,20 +38,25 @@ export async function sendMaxUserMessage(params: SendMessageParams): Promise<voi
   }
 }
 
+/** Невидимый символ: MAX не принимает POST /answers с пустым телом — нужно `message` или `notification`. */
+const CALLBACK_ANSWER_DEFAULT_NOTIFICATION = '\u200b';
+
 /** POST /answers — закрыть индикатор нажатия callback-кнопки. См. https://dev.max.ru/docs-api/methods/POST/answers */
 export async function answerMaxCallback(opts: {
   baseUrl: string;
   token: string;
   callbackId: string;
-  /** Короткий тост; можно не передавать. */
+  /** Одноразовое уведомление; без явного значения — невидимый символ (без тоста с текстом). */
   notification?: string;
 }): Promise<void> {
   const url = new URL(`${opts.baseUrl.replace(/\/$/, '')}/answers`);
   url.searchParams.set('callback_id', opts.callbackId);
-  const body: Record<string, unknown> = {};
-  if (opts.notification != null) {
-    body.notification = opts.notification;
-  }
+  const body: Record<string, unknown> = {
+    notification:
+      opts.notification != null && opts.notification !== ''
+        ? opts.notification
+        : CALLBACK_ANSWER_DEFAULT_NOTIFICATION,
+  };
   const res = await fetch(url, {
     method: 'POST',
     headers: {

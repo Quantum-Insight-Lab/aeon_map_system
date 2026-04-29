@@ -3,24 +3,23 @@ import type { Config } from '../config.js';
 import { CORE_FIRST_QUESTION_ID } from '../dialog/constants.js';
 import { deliverCardComputed } from '../dialog/deliver-card-computed.js';
 import { deliverNextLlmQuestion } from '../dialog/deliver-next-llm.js';
-import { deliverProtocolStep } from '../dialog/deliver-protocol-step.js';
+import { deliverProtocolStep, sendProtocolQuestionAfterContinue } from '../dialog/deliver-protocol-step.js';
 import { inferDialogState, type DialogEventRow, type DialogState } from '../dialog/resolve-state.js';
 import { fetchDialogEventsForUser } from '../db/dialog-events.js';
 import { insertUserStarted } from '../db/events.js';
 import {
   ensureIter2SessionAndGetId,
   insertAnswerGiven,
-  insertQuestionAskedProtocol,
+  insertProtocolContinueOffered,
   newSessionId,
 } from '../db/session-events.js';
 import { answerMaxCallback, sendMaxUserMessage } from '../integrations/max/client.js';
-import { protocolContinueKeyboardAttachment } from '../integrations/max/keyboard.js';
-import { mapAnswerToCoordinate } from '../protocol_mapper/map-answer.js';
 import {
-  formatMapperInvalidReplyMarkdown,
-  formatProtocolQuestionMessageMarkdown,
-  getProtocolQuestion,
-} from '../protocols/cognitive_v1/questions.js';
+  PROTOCOL_CONTINUE_CALLBACK_PAYLOAD,
+  protocolContinueKeyboardAttachment,
+} from '../integrations/max/keyboard.js';
+import { mapAnswerToCoordinate } from '../protocol_mapper/map-answer.js';
+import { formatMapperInvalidReplyMarkdown, getProtocolQuestion } from '../protocols/cognitive_v1/questions.js';
 import { PROTOCOL_FIRST_QUESTION_ID, isProtocolQuestionId } from '../protocols/cognitive_v1/queue.js';
 import type {
   BotStartedUpdate,
@@ -69,24 +68,22 @@ async function openProtocolSessionAndAskGoal1(opts: {
     log.warn(null, 'protocol: goal:1 question def missing');
     return;
   }
-  const bodyMd = formatProtocolQuestionMessageMarkdown(qDef);
-  const qIns = await insertQuestionAskedProtocol(pool, {
+  const gateIns = await insertProtocolContinueOffered(pool, {
     maxUserId,
     sessionId,
     questionId: PROTOCOL_FIRST_QUESTION_ID,
-    questionText: bodyMd,
     cognitiveProtocolVersion: config.cognitiveProtocolVersion,
   });
-  if (qIns === 'inserted' && config.maxBotToken) {
+  if (gateIns === 'inserted' && config.maxBotToken) {
     await sendMaxUserMessage({
       baseUrl: config.maxApiBaseUrl,
       token: config.maxBotToken,
       userId: maxUserId,
-      text: bodyMd,
+      text: config.dialogProtocolContinueGateMarkdown,
       format: 'markdown',
       attachments: [protocolContinueKeyboardAttachment()],
     });
-  } else if (qIns === 'inserted' && !config.maxBotToken) {
+  } else if (gateIns === 'inserted' && !config.maxBotToken) {
     log.warn('MAX_BOT_TOKEN empty: skip outbound first protocol question');
   }
 }
@@ -149,6 +146,28 @@ export async function handleMaxWebhook(opts: {
     } else if (!cid) {
       log.warn({ update }, 'message_callback without callback_id');
     }
+
+    const uid = update.callback.user?.user_id ?? update.message?.sender?.user_id;
+    if (uid != null) {
+      const payload = update.callback.payload ?? '';
+      const rows = await fetchDialogEventsForUser(pool, uid);
+      const state = inferDialogState(rows, inferOpts(config));
+      if (
+        payload === PROTOCOL_CONTINUE_CALLBACK_PAYLOAD &&
+        state.type === 'awaiting_continue' &&
+        isProtocolQuestionId(state.questionId)
+      ) {
+        await sendProtocolQuestionAfterContinue({
+          pool,
+          config,
+          maxUserId: uid,
+          sessionId: state.sessionId,
+          questionId: state.questionId,
+          log,
+        });
+      }
+    }
+
     return { duplicate: false, skipped: true };
   }
 
@@ -230,7 +249,7 @@ export async function handleMaxWebhook(opts: {
       await recoverProtocolFromState({ pool, config, maxUserId: uid, state, rows, log });
       rows = await fetchDialogEventsForUser(pool, uid);
       state = inferDialogState(rows, inferOpts(config));
-      if (state.type === 'awaiting_answer') {
+      if (state.type === 'awaiting_answer' || state.type === 'awaiting_continue') {
         return { duplicate: userIns === 'duplicate', skipped: true };
       }
     }
@@ -239,13 +258,26 @@ export async function handleMaxWebhook(opts: {
       await deliverNextLlmQuestion({ pool, config, maxUserId: uid, state, log });
       rows = await fetchDialogEventsForUser(pool, uid);
       state = inferDialogState(rows, inferOpts(config));
-      if (state.type === 'awaiting_answer') {
+      if (state.type === 'awaiting_answer' || state.type === 'awaiting_continue') {
         return { duplicate: userIns === 'duplicate', skipped: true };
       }
     }
 
     if (state.type === 'session_complete') {
       return { duplicate: userIns === 'duplicate', skipped: true };
+    }
+
+    if (state.type === 'awaiting_continue') {
+      if (config.maxBotToken) {
+        await sendMaxUserMessage({
+          baseUrl: config.maxApiBaseUrl,
+          token: config.maxBotToken,
+          userId: uid,
+          text: config.dialogAwaitContinueHintText,
+          format: 'markdown',
+        });
+      }
+      return { duplicate: userIns === 'duplicate', skipped: false };
     }
 
     if (state.type === 'needs_first_question') {

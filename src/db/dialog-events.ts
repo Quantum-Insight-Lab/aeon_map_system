@@ -4,6 +4,7 @@ import type { DialogEventRow } from '../dialog/resolve-state.js';
 const DIALOG_EVENT_TYPES = [
   'user.started',
   'session.opened',
+  'protocol.continue_offered',
   'question.asked',
   'answer.given',
   'llm.called',

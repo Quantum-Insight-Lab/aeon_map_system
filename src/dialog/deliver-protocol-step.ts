@@ -8,7 +8,7 @@ import {
   insertProtocolCoordinateAssigned,
 } from '../db/protocol-events.js';
 import { insertLlmCalledAnswerInterpretation } from '../db/llm-events.js';
-import { insertQuestionAskedProtocol } from '../db/session-events.js';
+import { insertProtocolContinueOffered, insertQuestionAskedProtocol } from '../db/session-events.js';
 import { interpretProtocolAnswer } from '../llm/interpret-answer.js';
 import {
   formatMapperInvalidReplyMarkdown,
@@ -16,7 +16,7 @@ import {
   formatProtocolQuestionMessageMarkdown,
   getProtocolQuestion,
 } from '../protocols/cognitive_v1/questions.js';
-import { nextQuestionAfter } from '../protocols/cognitive_v1/queue.js';
+import { nextQuestionAfter, type ProtocolQuestionId } from '../protocols/cognitive_v1/queue.js';
 import { COGNITIVE_CARD_TYPE } from './protocol-constants.js';
 import { sendMaxUserMessage } from '../integrations/max/client.js';
 import { protocolContinueKeyboardAttachment } from '../integrations/max/keyboard.js';
@@ -137,16 +137,14 @@ export async function deliverProtocolStep(opts: {
     return;
   }
 
-  const nextBodyMd = formatProtocolQuestionMessageMarkdown(nextDef);
-  const qIns = await insertQuestionAskedProtocol(pool, {
+  const gateIns = await insertProtocolContinueOffered(pool, {
     maxUserId,
     sessionId,
     questionId: next,
-    questionText: nextBodyMd,
     cognitiveProtocolVersion: config.cognitiveProtocolVersion,
   });
 
-  if (qIns === 'inserted' && config.maxBotToken) {
+  if (gateIns === 'inserted' && config.maxBotToken) {
     const interpHuman = stripInterpretationForUser(interp.interpretationText);
     if (interpHuman.trim().length > 0) {
       await sendMaxUserMessage({
@@ -161,11 +159,47 @@ export async function deliverProtocolStep(opts: {
       baseUrl: config.maxApiBaseUrl,
       token: config.maxBotToken,
       userId: maxUserId,
-      text: nextBodyMd,
+      text: config.dialogProtocolContinueGateMarkdown,
       format: 'markdown',
       attachments: [protocolContinueKeyboardAttachment()],
     });
-  } else if (qIns === 'inserted' && !config.maxBotToken) {
+  } else if (gateIns === 'inserted' && !config.maxBotToken) {
     log.warn('MAX_BOT_TOKEN empty: skip protocol step outbound');
+  }
+}
+
+/** После нажатия «Продолжить»: фиксируем question.asked и отправляем текст вопроса без кнопки. */
+export async function sendProtocolQuestionAfterContinue(opts: {
+  pool: Pool;
+  config: Config;
+  maxUserId: number;
+  sessionId: string;
+  questionId: ProtocolQuestionId;
+  log: { warn: (o: unknown, msg?: string) => void };
+}): Promise<void> {
+  const { pool, config, maxUserId, sessionId, questionId, log } = opts;
+  const qDef = getProtocolQuestion(questionId);
+  if (!qDef) {
+    log.warn({ questionId }, 'sendProtocolQuestionAfterContinue: question def missing');
+    return;
+  }
+  const bodyMd = formatProtocolQuestionMessageMarkdown(qDef);
+  const qIns = await insertQuestionAskedProtocol(pool, {
+    maxUserId,
+    sessionId,
+    questionId,
+    questionText: bodyMd,
+    cognitiveProtocolVersion: config.cognitiveProtocolVersion,
+  });
+  if (qIns === 'inserted' && config.maxBotToken) {
+    await sendMaxUserMessage({
+      baseUrl: config.maxApiBaseUrl,
+      token: config.maxBotToken,
+      userId: maxUserId,
+      text: bodyMd,
+      format: 'markdown',
+    });
+  } else if (qIns === 'inserted' && !config.maxBotToken) {
+    log.warn('MAX_BOT_TOKEN empty: skip protocol question reveal');
   }
 }

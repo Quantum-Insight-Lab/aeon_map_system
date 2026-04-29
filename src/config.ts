@@ -12,6 +12,10 @@ export type Config = {
   firstCoreQuestionText: string;
   /** Короткое подтверждение после answer.given на первом шаге протокола (goal:1). */
   dialogAnswerAckText: string;
+  /** Текст до показа протокольного вопроса: только markdown и кнопка «Продолжить». */
+  dialogProtocolContinueGateMarkdown: string;
+  /** Если пользователь пишет текст до нажатия «Продолжить». */
+  dialogAwaitContinueHintText: string;
   /** iter-3 LLM-цепочка после legacy core:first (не используется при протоколе v1). Default false. */
   dialogLlmNextQuestion: boolean;
   cognitiveProtocolVersion: string;
@@ -41,6 +45,12 @@ export function loadConfig(): Config {
       process.env.FIRST_CORE_QUESTION_TEXT ??
       'Привет! С чего хочешь начать разговор о себе — про работу и цели, про отношения или про ощущение смысла?',
     dialogAnswerAckText: process.env.DIALOG_ANSWER_ACK_TEXT ?? 'Спасибо, ответ записан!',
+    dialogProtocolContinueGateMarkdown:
+      process.env.DIALOG_PROTOCOL_CONTINUE_GATE_MARKDOWN ??
+      'Нажми **«Продолжить»**, чтобы открыть следующий вопрос.',
+    dialogAwaitContinueHintText:
+      process.env.DIALOG_AWAIT_CONTINUE_HINT_TEXT ??
+      'Сначала нажми **«Продолжить»** под сообщением бота — так откроется вопрос.',
     anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
     anthropicModel: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514',
     openaiApiKey: process.env.OPENAI_API_KEY ?? '',

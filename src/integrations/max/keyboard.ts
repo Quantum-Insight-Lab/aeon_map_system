@@ -1,4 +1,4 @@
-/** Payload кнопки «Продолжить» под протокольным вопросом (MAX inline_keyboard / callback). */
+/** Payload кнопки «Продолжить» до показа текста протокольного вопроса (MAX inline_keyboard / callback). */
 export const PROTOCOL_CONTINUE_CALLBACK_PAYLOAD = 'protocol_continue';
 
 /** Одна кнопка в ряд — см. POST /messages → attachments → inline_keyboard. */

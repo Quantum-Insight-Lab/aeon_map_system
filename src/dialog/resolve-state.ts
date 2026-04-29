@@ -19,6 +19,12 @@ export type DialogEventRow = {
 
 export type DialogState =
   | { type: 'needs_first_question' }
+  | {
+      /** Показано сообщение с кнопкой «Продолжить»; текст вопроса ещё не отправлен. */
+      type: 'awaiting_continue';
+      sessionId: string;
+      questionId: string;
+    }
   | { type: 'awaiting_answer'; sessionId: string; questionId: string; openingMessageMid: string | null }
   | { type: 'needs_next_llm'; sessionId: string; lastAnswerQuestionId: string }
   | { type: 'needs_next_protocol_step'; sessionId: string; lastAnswerQuestionId: string }
@@ -93,6 +99,26 @@ function pendingProtocolInterpret(events: DialogEventRow[]): { sessionId: string
   return ok ? null : { sessionId: lastSid, questionId: lastQid };
 }
 
+/** После `protocol.continue_offered` для (session, question) ждём callback — пока нет `question.asked` с тем же якорем. */
+function pendingContinueGate(events: DialogEventRow[]): { sessionId: string; questionId: string } | null {
+  let gate: { sessionId: string; questionId: string } | null = null;
+  for (const e of events) {
+    if (e.event_type === 'protocol.continue_offered') {
+      const sid = String(e.payload.session_id ?? '');
+      const qid = String(e.payload.question_id ?? '');
+      if (sid !== '' && qid !== '') gate = { sessionId: sid, questionId: qid };
+    }
+    if (e.event_type === 'question.asked') {
+      const sid = String(e.payload.session_id ?? '');
+      const qid = String(e.payload.question_id ?? '');
+      if (gate != null && sid === gate.sessionId && qid === gate.questionId) {
+        gate = null;
+      }
+    }
+  }
+  return gate;
+}
+
 /** Ответ на последнем якоре есть в тексте, карты ещё нет — финализировать карту (recovery). */
 function pendingProtocolCard(events: DialogEventRow[]): string | null {
   let anchor3Interpreted = false;
@@ -137,6 +163,11 @@ export function inferDialogState(events: DialogEventRow[], opts?: InferDialogSta
   const cardSid = pendingProtocolCard(events);
   if (cardSid != null) {
     return { type: 'protocol_complete', sessionId: cardSid };
+  }
+
+  const gate = pendingContinueGate(events);
+  if (gate != null) {
+    return { type: 'awaiting_continue', sessionId: gate.sessionId, questionId: gate.questionId };
   }
 
   let pending: { sessionId: string; questionId: string } | null = null;

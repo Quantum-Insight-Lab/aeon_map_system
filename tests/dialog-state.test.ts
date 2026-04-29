@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CORE_FIRST_QUESTION_ID, coreLlmQuestionId } from '../src/dialog/constants.js';
 import { inferDialogState, type DialogEventRow } from '../src/dialog/resolve-state.js';
+import { PROTOCOL_FIRST_QUESTION_ID } from '../src/protocols/cognitive_v1/queue.js';
 
 function row(type: string, payload: Record<string, unknown>): DialogEventRow {
   return { event_type: type, payload };
@@ -10,6 +11,48 @@ describe('inferDialogState', () => {
   it('needs_first_question after user.started only', () => {
     const events: DialogEventRow[] = [row('user.started', { max_user_id: 1 })];
     expect(inferDialogState(events, { dialogLlmNextQuestion: true })).toEqual({ type: 'needs_first_question' });
+  });
+
+  it('awaiting_continue после protocol.continue_offered до question.asked', () => {
+    const sid = 'sess-gate';
+    const events: DialogEventRow[] = [
+      row('user.started', { max_user_id: 1 }),
+      row('session.opened', { session_id: sid, max_user_id: 1 }),
+      row('protocol.continue_offered', {
+        session_id: sid,
+        question_id: PROTOCOL_FIRST_QUESTION_ID,
+        max_user_id: 1,
+      }),
+    ];
+    expect(inferDialogState(events)).toEqual({
+      type: 'awaiting_continue',
+      sessionId: sid,
+      questionId: PROTOCOL_FIRST_QUESTION_ID,
+    });
+  });
+
+  it('question.asked после continue_offered даёт awaiting_answer', () => {
+    const sid = 'sess-gate';
+    const events: DialogEventRow[] = [
+      row('user.started', { max_user_id: 1 }),
+      row('session.opened', { session_id: sid, max_user_id: 1 }),
+      row('protocol.continue_offered', {
+        session_id: sid,
+        question_id: PROTOCOL_FIRST_QUESTION_ID,
+        max_user_id: 1,
+      }),
+      row('question.asked', {
+        session_id: sid,
+        question_id: PROTOCOL_FIRST_QUESTION_ID,
+        max_user_id: 1,
+      }),
+    ];
+    expect(inferDialogState(events)).toEqual({
+      type: 'awaiting_answer',
+      sessionId: sid,
+      questionId: PROTOCOL_FIRST_QUESTION_ID,
+      openingMessageMid: null,
+    });
   });
 
   it('awaiting_answer after session.opened + question.asked for core:first', () => {
