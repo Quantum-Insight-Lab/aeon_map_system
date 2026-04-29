@@ -13,7 +13,8 @@ import {
   insertQuestionAskedProtocol,
   newSessionId,
 } from '../db/session-events.js';
-import { sendMaxUserMessage } from '../integrations/max/client.js';
+import { answerMaxCallback, sendMaxUserMessage } from '../integrations/max/client.js';
+import { protocolContinueKeyboardAttachment } from '../integrations/max/keyboard.js';
 import { mapAnswerToCoordinate } from '../protocol_mapper/map-answer.js';
 import {
   formatMapperInvalidReplyMarkdown,
@@ -21,8 +22,17 @@ import {
   getProtocolQuestion,
 } from '../protocols/cognitive_v1/questions.js';
 import { PROTOCOL_FIRST_QUESTION_ID, isProtocolQuestionId } from '../protocols/cognitive_v1/queue.js';
-import type { BotStartedUpdate, MaxUpdate, MessageCreatedUpdate } from '../integrations/max/types.js';
+import type {
+  BotStartedUpdate,
+  MaxUpdate,
+  MessageCallbackUpdate,
+  MessageCreatedUpdate,
+} from '../integrations/max/types.js';
 import { resolveMaxUpdateId } from '../integrations/max/update-id.js';
+
+function isMessageCallbackUpdate(u: MaxUpdate): u is MessageCallbackUpdate {
+  return u.update_type === 'message_callback';
+}
 
 function isBotStarted(u: MaxUpdate): u is BotStartedUpdate {
   return u.update_type === 'bot_started' && 'user' in u && u.user != null;
@@ -74,6 +84,7 @@ async function openProtocolSessionAndAskGoal1(opts: {
       userId: maxUserId,
       text: bodyMd,
       format: 'markdown',
+      attachments: [protocolContinueKeyboardAttachment()],
     });
   } else if (qIns === 'inserted' && !config.maxBotToken) {
     log.warn('MAX_BOT_TOKEN empty: skip outbound first protocol question');
@@ -122,6 +133,25 @@ export async function handleMaxWebhook(opts: {
   log: { warn: (o: unknown, msg?: string) => void; info: (o: unknown, msg?: string) => void };
 }): Promise<{ duplicate: boolean; skipped: boolean }> {
   const { config, pool, update, log } = opts;
+
+  if (isMessageCallbackUpdate(update)) {
+    const cid = update.callback.callback_id;
+    if (cid && config.maxBotToken) {
+      try {
+        await answerMaxCallback({
+          baseUrl: config.maxApiBaseUrl,
+          token: config.maxBotToken,
+          callbackId: cid,
+        });
+      } catch (e) {
+        log.warn({ err: e }, 'max: answer callback failed');
+      }
+    } else if (!cid) {
+      log.warn({ update }, 'message_callback without callback_id');
+    }
+    return { duplicate: false, skipped: true };
+  }
+
   const maxUpdateId = resolveMaxUpdateId(update);
   if (!maxUpdateId) {
     log.warn({ update_type: update.update_type }, 'webhook: no max_update_id, skip');

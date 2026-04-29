@@ -79,8 +79,7 @@ function modalityVariants(a: string, b: string, mid: string): readonly ProtocolV
 }
 
 function anchorVariants(lines: readonly string[]): readonly ProtocolVariant[] {
-  const letters = ['А', 'Б', 'В', 'Г', 'Д', 'Е', 'Ж', 'З'] as const;
-  return letters.map((L, i) => ({ key: L, text: `${L}: ${lines[i]}` }));
+  return lines.map((line, i) => ({ key: String(i + 1), text: line }));
 }
 
 const Я1_LINES = [
@@ -257,9 +256,9 @@ export function formatProtocolQuestionForInterpretPrompt(q: ProtocolQuestion): s
       ? 'Ожидаемый формат ответа пользователя: одна цифра от 1 до 8 (номер пункта).'
       : q.axis === 'modality'
         ? 'Ожидаемый формат ответа пользователя: одна буква А, Б или М (латиница A, B, M допустима).'
-        : 'Ожидаемый формат ответа пользователя: одна кириллическая буква А–З по строке якоря.';
+        : 'Ожидаемый формат ответа пользователя: одна цифра от 1 до 8 (номер строки якоря).';
   const variantsBlock =
-    q.axis === 'goal'
+    q.axis === 'goal' || q.axis === 'anchor'
       ? q.variants.map((v) => `${v.key}. ${v.text}`).join('\n')
       : q.variants.map((v) => v.text).join('\n');
   return [
@@ -292,8 +291,11 @@ export function formatPriorCoordinatesSummaryForInterpret(
 
 /** Полный текст сообщения пользователю (без преамбулы бота). */
 export function formatProtocolQuestionMessage(q: ProtocolQuestion): string {
-  const lines = [q.stem, '', ...q.variants.map((v) => v.text)];
-  return lines.join('\n');
+  const variantLines =
+    q.axis === 'goal' || q.axis === 'anchor'
+      ? q.variants.map((v) => `${v.key}. ${v.text}`)
+      : q.variants.map((v) => v.text);
+  return [q.stem, '', ...variantLines].join('\n');
 }
 
 /** Разрыв строки в HTML для MAX/Telegram (предпочтительно &lt;br&gt; без слэша). */
@@ -329,11 +331,15 @@ function stemMarkdownToHtml(stem: string): string {
 export function formatProtocolQuestionMessageHtml(q: ProtocolQuestion): string {
   const stemHtml = stemMarkdownToHtml(q.stem);
 
-  if (q.axis === 'goal') {
+  if (q.axis === 'goal' || q.axis === 'anchor') {
     const variantsHtml = q.variants
       .map((v) => `<b>${escapeHtml(v.key)}.</b> ${escapeHtml(v.text)}`)
       .join(PAR);
-    return `${stemHtml}${PAR}<b>Варианты:</b>${PAR}${variantsHtml}${PAR}<i>Ответь <b>одной цифрой</b> — номер подходящего пункта от <b>1</b> до <b>8</b> (например: <b>6</b>). Полный текст без номера не принимается.</i>`;
+    const footer =
+      q.axis === 'goal'
+        ? `<i>Ответь <b>одной цифрой</b> — номер подходящего пункта от <b>1</b> до <b>8</b> (например: <b>6</b>). Полный текст без номера не принимается.</i>`
+        : `<i>Ответь <b>одной цифрой</b> — номер подходящей строки от <b>1</b> до <b>8</b> (например: <b>3</b>). Полный текст без номера не принимается.</i>`;
+    return `${stemHtml}${PAR}<b>Варианты:</b>${PAR}${variantsHtml}${PAR}${footer}`;
   }
 
   if (q.axis === 'modality') {
@@ -341,8 +347,8 @@ export function formatProtocolQuestionMessageHtml(q: ProtocolQuestion): string {
     return `${stemHtml}${PAR}${variantsHtml}${PAR}<i>Ответь <b>одной буквой</b>: <b>А</b>, <b>Б</b> или <b>М</b> (латиница A, B, M допустима).</i>`;
   }
 
-  const variantsHtml = q.variants.map((v) => escapeHtml(v.text)).join(PAR);
-  return `${stemHtml}${PAR}${variantsHtml}${PAR}<i>Ответь <b>одной буквой</b> строки якоря — <b>А</b>–<b>З</b> (кириллица).</i>`;
+  const _: never = q.axis;
+  throw new Error(`unexpected axis: ${_}`);
 }
 
 /** Стем для MAX Markdown: *курсив*, между абзацами — \\n\\n (как в format=markdown). */
@@ -369,16 +375,20 @@ function stemMarkdownToMarkdownStem(stem: string): string {
 /** Исходящее сообщение протокола для MAX API — format `markdown` (переносы через пустые строки; см. dev.max.ru). */
 export function formatProtocolQuestionMessageMarkdown(q: ProtocolQuestion): string {
   const stemMd = stemMarkdownToMarkdownStem(q.stem);
-  if (q.axis === 'goal') {
+  if (q.axis === 'goal' || q.axis === 'anchor') {
     const variantsMd = q.variants.map((v) => `**${v.key}.** ${v.text}`).join('\n\n');
-    return `${stemMd}\n\n**Варианты:**\n\n${variantsMd}\n\n**Ответь одной цифрой** — номер подходящего пункта от **1** до **8** (например: **6**). _Полный текст без номера не принимается._`;
+    const footer =
+      q.axis === 'goal'
+        ? `**Ответь одной цифрой** — номер подходящего пункта от **1** до **8** (например: **6**). _Полный текст без номера не принимается._`
+        : `**Ответь одной цифрой** — номер подходящей строки от **1** до **8** (например: **3**). _Полный текст без номера не принимается._`;
+    return `${stemMd}\n\n**Варианты:**\n\n${variantsMd}\n\n${footer}`;
   }
   if (q.axis === 'modality') {
     const variantsMd = q.variants.map((v) => v.text).join('\n\n');
     return `${stemMd}\n\n${variantsMd}\n\n**Ответь одной буквой**: **А**, **Б** или **М** (латиница A, B, M допустима).`;
   }
-  const variantsMd = q.variants.map((v) => v.text).join('\n\n');
-  return `${stemMd}\n\n${variantsMd}\n\n**Ответь одной буквой** строки якоря — **А**–**З** (кириллица).`;
+  const _: never = q.axis;
+  throw new Error(`unexpected axis: ${_}`);
 }
 
 /** Подсказка при ответе, который mapper не разобрал (recovery или legacy-путь). */
@@ -393,7 +403,7 @@ export function formatMapperInvalidReplyHtml(questionId: string): string {
   if (q.axis === 'modality') {
     return `<b>Не распознал ответ.</b>${PAR}Ответь одной буквой: <b>А</b>, <b>Б</b> или <b>М</b>.`;
   }
-  return `<b>Не распознал ответ.</b>${PAR}Ответь одной буквой якоря <b>А</b>–<b>З</b> (кириллица).`;
+  return `<b>Не распознал ответ.</b>${PAR}Нужна <b>одна цифра от 1 до 8</b> — номер строки якоря (например: <b>3</b>).`;
 }
 
 /** То же для отправки с format=markdown. */
@@ -408,5 +418,5 @@ export function formatMapperInvalidReplyMarkdown(questionId: string): string {
   if (q.axis === 'modality') {
     return `**Не распознал ответ.**\n\nОтветь одной буквой: **А**, **Б** или **М**.`;
   }
-  return `**Не распознал ответ.**\n\nОтветь одной буквой якоря **А**–**З** (кириллица).`;
+  return `**Не распознал ответ.**\n\nНужна **одна цифра от 1 до 8** — номер строки якоря (например: **3**).`;
 }

@@ -2,7 +2,7 @@
 export const COGNITIVE_PROTOCOL_VERSION = 'v1';
 
 /** Версия промпта cognitive-interpret-answer.md */
-export const COGNITIVE_INTERPRET_PROMPT_VERSION = 'cognitive-interpret-answer@v3';
+export const COGNITIVE_INTERPRET_PROMPT_VERSION = 'cognitive-interpret-answer@v4';
 
 /** Карточка выпускается только при confidence ≥ порога (INV-03). */
 export const CARD_CONFIDENCE_THRESHOLD = 0.55;

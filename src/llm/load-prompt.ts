@@ -34,7 +34,7 @@ export type CognitiveInterpretPromptArgs = {
   priorCoordinatesSummary: string;
 };
 
-/** cognitive-interpret-answer@v3 — интерпретация одного ответа протокола (контекст вопроса + методика). */
+/** cognitive-interpret-answer@v4 — интерпретация одного ответа протокола (контекст вопроса + методика). */
 export async function loadCognitiveInterpretPrompt(args: CognitiveInterpretPromptArgs): Promise<LoadedDialogPrompt> {
   const filePath = path.join(process.cwd(), 'prompts', COGNITIVE_INTERPRET_FILE);
   const raw = await readFile(filePath, 'utf8');

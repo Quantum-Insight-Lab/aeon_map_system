@@ -1,4 +1,9 @@
-import type { BotStartedUpdate, MaxUpdate, MessageCreatedUpdate } from './types.js';
+import type {
+  BotStartedUpdate,
+  MaxUpdate,
+  MessageCallbackUpdate,
+  MessageCreatedUpdate,
+} from './types.js';
 
 function isBotStarted(u: MaxUpdate): u is BotStartedUpdate {
   return u.update_type === 'bot_started' && 'user' in u && u.user != null;
@@ -6,6 +11,10 @@ function isBotStarted(u: MaxUpdate): u is BotStartedUpdate {
 
 function isMessageCreated(u: MaxUpdate): u is MessageCreatedUpdate {
   return u.update_type === 'message_created' && 'message' in u && u.message != null;
+}
+
+function isMessageCallback(u: MaxUpdate): u is MessageCallbackUpdate {
+  return u.update_type === 'message_callback' && 'callback' in u && u.callback != null;
 }
 
 function rootUpdateId(update: MaxUpdate): string | null {
@@ -21,6 +30,11 @@ function rootUpdateId(update: MaxUpdate): string | null {
 export function resolveMaxUpdateId(update: MaxUpdate): string | null {
   const fromRoot = rootUpdateId(update);
   if (fromRoot) return fromRoot;
+
+  if (isMessageCallback(update)) {
+    const cid = update.callback.callback_id;
+    if (cid) return `callback:${cid}`;
+  }
 
   if (isMessageCreated(update)) {
     const mid = update.message.body?.mid;

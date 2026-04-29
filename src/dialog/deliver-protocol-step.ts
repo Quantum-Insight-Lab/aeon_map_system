@@ -19,6 +19,7 @@ import {
 import { nextQuestionAfter } from '../protocols/cognitive_v1/queue.js';
 import { COGNITIVE_CARD_TYPE } from './protocol-constants.js';
 import { sendMaxUserMessage } from '../integrations/max/client.js';
+import { protocolContinueKeyboardAttachment } from '../integrations/max/keyboard.js';
 import { deliverCardComputed } from './deliver-card-computed.js';
 
 /** Убирает JSON-хвост и типичные markdown-fences вокруг JSON — пользователь видит только прозу. */
@@ -153,6 +154,7 @@ export async function deliverProtocolStep(opts: {
         token: config.maxBotToken,
         userId: maxUserId,
         text: interpHuman,
+        format: 'markdown',
       });
     }
     await sendMaxUserMessage({
@@ -161,6 +163,7 @@ export async function deliverProtocolStep(opts: {
       userId: maxUserId,
       text: nextBodyMd,
       format: 'markdown',
+      attachments: [protocolContinueKeyboardAttachment()],
     });
   } else if (qIns === 'inserted' && !config.maxBotToken) {
     log.warn('MAX_BOT_TOKEN empty: skip protocol step outbound');

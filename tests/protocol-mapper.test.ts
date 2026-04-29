@@ -27,7 +27,12 @@ describe('mapAnswerToCoordinate', () => {
     });
   });
 
-  it('anchor одна буква А–З', () => {
+  it('anchor: цифра 1–8 или буква А–З', () => {
+    expect(mapAnswerToCoordinate('core:protocol:anchor:2', '3')).toMatchObject({
+      ok: true,
+      axis: 'anchor',
+      coordinate: 'В',
+    });
     expect(mapAnswerToCoordinate('core:protocol:anchor:2', 'в')).toMatchObject({
       ok: true,
       axis: 'anchor',
@@ -52,9 +57,9 @@ describe('mapAnswerToCoordinate', () => {
       ['core:protocol:modality:3', 'А'],
       ['core:protocol:modality:4', 'Б'],
       ['core:protocol:modality:5', 'М'],
-      ['core:protocol:anchor:1', 'А'],
-      ['core:protocol:anchor:2', 'Ж'],
-      ['core:protocol:anchor:3', 'З'],
+      ['core:protocol:anchor:1', '1'],
+      ['core:protocol:anchor:2', '7'],
+      ['core:protocol:anchor:3', '8'],
     ] as const;
     for (const [qid, raw] of checks) {
       expect(mapAnswerToCoordinate(qid, raw).ok).toBe(true);
