@@ -136,18 +136,29 @@ export async function interpretProtocolAnswer(opts: {
   answerText: string;
   mappedAxis: string;
   mappedCoordinate: string;
+  priorCoordinatesSummary: string;
   log: {
     warn: (o: unknown, msg?: string) => void;
     info: (o: unknown, msg?: string) => void;
   };
 }): Promise<InterpretAnswerResult> {
-  const { config, sessionId, questionId, answerText, mappedAxis, mappedCoordinate, log } = opts;
+  const {
+    config,
+    sessionId,
+    questionId,
+    answerText,
+    mappedAxis,
+    mappedCoordinate,
+    priorCoordinatesSummary,
+    log,
+  } = opts;
   const { body: userContent, promptVersion } = await loadCognitiveInterpretPrompt({
     sessionId,
     questionId,
     answerText,
     mappedAxis,
     mappedCoordinate,
+    priorCoordinatesSummary,
   });
   const inputHash = sha256Hex(userContent);
   const timeoutMs = config.llmTimeoutMs;

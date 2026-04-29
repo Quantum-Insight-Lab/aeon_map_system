@@ -1,18 +1,32 @@
 import type { Pool } from 'pg';
 import type { Config } from '../config.js';
+import type { MapAnswerOk } from '../protocol_mapper/map-answer.js';
 import { mapAnswerToCoordinate } from '../protocol_mapper/map-answer.js';
-import { insertAnswerInterpreted, insertProtocolCoordinateAssigned } from '../db/protocol-events.js';
+import {
+  fetchProtocolCoordinatesPriorToQuestion,
+  insertAnswerInterpreted,
+  insertProtocolCoordinateAssigned,
+} from '../db/protocol-events.js';
 import { insertLlmCalledAnswerInterpretation } from '../db/llm-events.js';
 import { insertQuestionAskedProtocol } from '../db/session-events.js';
 import { interpretProtocolAnswer } from '../llm/interpret-answer.js';
-import { formatProtocolQuestionMessage, getProtocolQuestion } from '../protocols/cognitive_v1/questions.js';
+import {
+  escapeHtml,
+  formatMapperInvalidReplyHtml,
+  formatPriorCoordinatesSummaryForInterpret,
+  formatProtocolQuestionMessageHtml,
+  getProtocolQuestion,
+} from '../protocols/cognitive_v1/questions.js';
 import { nextQuestionAfter } from '../protocols/cognitive_v1/queue.js';
 import { COGNITIVE_CARD_TYPE } from './protocol-constants.js';
 import { sendMaxUserMessage } from '../integrations/max/client.js';
 import { deliverCardComputed } from './deliver-card-computed.js';
 
-function stripTrailingJsonLine(text: string): string {
-  const lines = text.trim().split(/\r?\n/);
+/** Убирает JSON-хвост и типичные markdown-fences вокруг JSON — пользователь видит только прозу. */
+function stripInterpretationForUser(text: string): string {
+  let t = text.trim();
+  t = t.replace(/\s*`{3}(?:json)?\s*\{[\s\S]*?"coordinate"[\s\S]*?\}\s*`{3}\s*$/u, '');
+  const lines = t.split(/\r?\n/);
   while (lines.length > 0) {
     const last = lines[lines.length - 1]?.trim() ?? '';
     if (last.startsWith('{') && last.includes('"coordinate"')) {
@@ -20,6 +34,9 @@ function stripTrailingJsonLine(text: string): string {
       continue;
     }
     break;
+  }
+  while (lines.length > 0 && lines[lines.length - 1]?.trim() === '```') {
+    lines.pop();
   }
   return lines.join('\n').trim();
 }
@@ -32,19 +49,21 @@ export async function deliverProtocolStep(opts: {
   questionId: string;
   answerText: string;
   answerEventId: string;
+  /** Если передан (валидный mapper из webhook), повторный разбор текста не делается. */
+  preMapped?: MapAnswerOk;
   log: { warn: (o: unknown, msg?: string) => void; info: (o: unknown, msg?: string) => void };
 }): Promise<void> {
   const { pool, config, maxUserId, sessionId, questionId, answerText, answerEventId, log } = opts;
 
-  const mapped = mapAnswerToCoordinate(questionId, answerText);
+  const mapped = opts.preMapped ?? mapAnswerToCoordinate(questionId, answerText);
   if (!mapped.ok) {
     if (config.maxBotToken) {
       await sendMaxUserMessage({
         baseUrl: config.maxApiBaseUrl,
         token: config.maxBotToken,
         userId: maxUserId,
-        text:
-          'Не распознал ответ. Для блока целей напиши число от 1 до 8; для модальности — А, Б или М (можно латиницей A/B/M); для якоря — одну букву А–З.',
+        text: formatMapperInvalidReplyHtml(questionId),
+        format: 'html',
       });
     } else {
       log.warn('mapper invalid / MAX_BOT_TOKEN empty');
@@ -63,6 +82,9 @@ export async function deliverProtocolStep(opts: {
     sourceQuestionId: questionId,
   });
 
+  const priorRows = await fetchProtocolCoordinatesPriorToQuestion(pool, sessionId, questionId);
+  const priorSummary = formatPriorCoordinatesSummaryForInterpret(priorRows);
+
   let interp;
   try {
     interp = await interpretProtocolAnswer({
@@ -72,6 +94,7 @@ export async function deliverProtocolStep(opts: {
       answerText,
       mappedAxis: mapped.axis,
       mappedCoordinate: mapped.coordinate,
+      priorCoordinatesSummary: priorSummary,
       log,
     });
   } catch (e) {
@@ -79,7 +102,7 @@ export async function deliverProtocolStep(opts: {
     return;
   }
 
-  const summaryLine = stripTrailingJsonLine(interp.interpretationText).slice(0, 240);
+  const summaryLine = stripInterpretationForUser(interp.interpretationText).slice(0, 240);
   const llmRow = await insertLlmCalledAnswerInterpretation(pool, {
     maxUserId,
     sessionId,
@@ -114,23 +137,33 @@ export async function deliverProtocolStep(opts: {
     return;
   }
 
-  const nextBody = formatProtocolQuestionMessage(nextDef);
+  const nextBodyHtml = formatProtocolQuestionMessageHtml(nextDef);
   const qIns = await insertQuestionAskedProtocol(pool, {
     maxUserId,
     sessionId,
     questionId: next,
-    questionText: nextBody,
+    questionText: nextBodyHtml,
     cognitiveProtocolVersion: config.cognitiveProtocolVersion,
   });
 
   if (qIns === 'inserted' && config.maxBotToken) {
-    const interpHuman = stripTrailingJsonLine(interp.interpretationText);
-    const textOut = `${interpHuman}\n\n${nextBody}`;
+    const interpHuman = stripInterpretationForUser(interp.interpretationText);
+    const interpEscaped = escapeHtml(interpHuman).replace(/\n/g, '<br>');
+    if (interpEscaped.trim().length > 0) {
+      await sendMaxUserMessage({
+        baseUrl: config.maxApiBaseUrl,
+        token: config.maxBotToken,
+        userId: maxUserId,
+        text: interpEscaped,
+        format: 'html',
+      });
+    }
     await sendMaxUserMessage({
       baseUrl: config.maxApiBaseUrl,
       token: config.maxBotToken,
       userId: maxUserId,
-      text: textOut,
+      text: nextBodyHtml,
+      format: 'html',
     });
   } else if (qIns === 'inserted' && !config.maxBotToken) {
     log.warn('MAX_BOT_TOKEN empty: skip protocol step outbound');

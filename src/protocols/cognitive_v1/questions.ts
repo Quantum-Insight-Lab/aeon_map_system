@@ -244,8 +244,118 @@ export function getProtocolQuestion(id: string): ProtocolQuestion | undefined {
   return BY_ID.get(id as ProtocolQuestionId);
 }
 
+const AXIS_LABEL_INTERPRET: Record<CognitiveAxis, string> = {
+  goal: 'Цель',
+  modality: 'Модальность',
+  anchor: 'Якорь',
+};
+
+/** Контекст вопроса для LLM cognitive-interpret (стем + варианты + ожидаемый формат ответа). */
+export function formatProtocolQuestionForInterpretPrompt(q: ProtocolQuestion): string {
+  const axisHint =
+    q.axis === 'goal'
+      ? 'Ожидаемый формат ответа пользователя: одна цифра от 1 до 8 (номер пункта).'
+      : q.axis === 'modality'
+        ? 'Ожидаемый формат ответа пользователя: одна буква А, Б или М (латиница A, B, M допустима).'
+        : 'Ожидаемый формат ответа пользователя: одна кириллическая буква А–З по строке якоря.';
+  const variantsBlock =
+    q.axis === 'goal'
+      ? q.variants.map((v) => `${v.key}. ${v.text}`).join('\n')
+      : q.variants.map((v) => v.text).join('\n');
+  return [
+    `Текущий вопрос (${q.order}/12), блок «${q.label}», ось: ${q.axis}.`,
+    axisHint,
+    '',
+    'Текст вопроса:',
+    q.stem.trim(),
+    '',
+    'Варианты:',
+    variantsBlock,
+  ].join('\n');
+}
+
+/** Краткий список уже зафиксированных координат до текущего шага. */
+export function formatPriorCoordinatesSummaryForInterpret(
+  rows: ReadonlyArray<{ questionId: string; axis: CognitiveAxis; coordinate: string }>,
+): string {
+  if (rows.length === 0) {
+    return 'Ранее в этой сессии координаты ещё не зафиксированы (первый ответ протокола).';
+  }
+  return rows
+    .map((r) => {
+      const q = getProtocolQuestion(r.questionId);
+      const step = q ? q.label : r.questionId;
+      return `- ${AXIS_LABEL_INTERPRET[r.axis]} (${step}): ${r.coordinate}`;
+    })
+    .join('\n');
+}
+
 /** Полный текст сообщения пользователю (без преамбулы бота). */
 export function formatProtocolQuestionMessage(q: ProtocolQuestion): string {
   const lines = [q.stem, '', ...q.variants.map((v) => v.text)];
   return lines.join('\n');
+}
+
+/** Разрыв строки в HTML для MAX/Telegram (предпочтительно &lt;br&gt; без слэша). */
+const BR = '<br>';
+const PAR = '<br><br>';
+
+export function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Стем методики: абзацы через двойной перенос; *курсив*; внутри абзаца — одинарный &lt;br&gt;. */
+function stemMarkdownToHtml(stem: string): string {
+  return stem
+    .split(/\n\s*\n/)
+    .map((para) => {
+      const p = para.trim();
+      let result = '';
+      let lastIndex = 0;
+      const re = /\*([^*]+)\*/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(p)) !== null) {
+        result += escapeHtml(p.slice(lastIndex, m.index));
+        result += `<i>${escapeHtml(m[1])}</i>`;
+        lastIndex = m.index + m[0].length;
+      }
+      result += escapeHtml(p.slice(lastIndex));
+      return result.replace(/\n/g, BR);
+    })
+    .join(PAR);
+}
+
+/** Пользовательское сообщение протокола с номерами/инструкциями (POST /messages format=html). */
+export function formatProtocolQuestionMessageHtml(q: ProtocolQuestion): string {
+  const stemHtml = stemMarkdownToHtml(q.stem);
+
+  if (q.axis === 'goal') {
+    const variantsHtml = q.variants
+      .map((v) => `<b>${escapeHtml(v.key)}.</b> ${escapeHtml(v.text)}`)
+      .join(PAR);
+    return `${stemHtml}${PAR}<b>Варианты:</b>${PAR}${variantsHtml}${PAR}<i>Ответь <b>одной цифрой</b> — номер подходящего пункта от <b>1</b> до <b>8</b> (например: <b>6</b>). Полный текст без номера не принимается.</i>`;
+  }
+
+  if (q.axis === 'modality') {
+    const variantsHtml = q.variants.map((v) => escapeHtml(v.text)).join(PAR);
+    return `${stemHtml}${PAR}${variantsHtml}${PAR}<i>Ответь <b>одной буквой</b>: <b>А</b>, <b>Б</b> или <b>М</b> (латиница A, B, M допустима).</i>`;
+  }
+
+  const variantsHtml = q.variants.map((v) => escapeHtml(v.text)).join(PAR);
+  return `${stemHtml}${PAR}${variantsHtml}${PAR}<i>Ответь <b>одной буквой</b> строки якоря — <b>А</b>–<b>З</b> (кириллица).</i>`;
+}
+
+/** Подсказка при ответе, который mapper не разобрал (recovery или legacy-путь). */
+export function formatMapperInvalidReplyHtml(questionId: string): string {
+  const q = getProtocolQuestion(questionId);
+  if (!q) {
+    return `<b>Не распознал ответ.</b>${PAR}Повтори ввод по формату текущего шага.`;
+  }
+  if (q.axis === 'goal') {
+    return `<b>Не распознал ответ.</b>${PAR}Нужна <b>одна цифра от 1 до 8</b> — номер пункта списка (например: <b>6</b>).`;
+  }
+  if (q.axis === 'modality') {
+    return `<b>Не распознал ответ.</b>${PAR}Ответь одной буквой: <b>А</b>, <b>Б</b> или <b>М</b>.`;
+  }
+  return `<b>Не распознал ответ.</b>${PAR}Ответь одной буквой якоря <b>А</b>–<b>З</b> (кириллица).`;
 }
