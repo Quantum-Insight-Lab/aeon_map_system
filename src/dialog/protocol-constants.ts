@@ -2,7 +2,7 @@
 export const COGNITIVE_PROTOCOL_VERSION = 'v1';
 
 /** Версия промпта cognitive-interpret-answer.md */
-export const COGNITIVE_INTERPRET_PROMPT_VERSION = 'cognitive-interpret-answer@v6';
+export const COGNITIVE_INTERPRET_PROMPT_VERSION = 'cognitive-interpret-answer@v7';
 
 /** Версия промпта cognitive-card-render.md (итоговая карта §6 методички). */
 export const COGNITIVE_CARD_RENDER_PROMPT_VERSION = 'cognitive-card-render@v1';

@@ -162,7 +162,7 @@ export const COGNITIVE_PROTOCOL_QUESTIONS: readonly ProtocolQuestion[] = [
     axis: 'goal',
     order: 3,
     label: 'Ц3',
-    stem: '*Какие истории цепляют тебя сильнее остальных? Можно выбрать две.*',
+    stem: '*Какие истории цепляют тебя сильнее остальных?*',
     variants: GOAL_VARIANTS_C3,
   },
   {

@@ -26,6 +26,18 @@ import {
 import { deliverCardComputed } from './deliver-card-computed.js';
 import { dbg, type DomainLogger } from '../util/domain-log.js';
 
+/** Обрезает «превью» следующего вопроса, если модель его процитировала (вопрос показывается только после «Продолжить»). */
+export function stripEchoedNextProtocolQuestion(text: string): string {
+  const t = text.replace(/\r\n/g, '\n').trim();
+  const re = /\n\n(?:\*\*)?Вопрос\s+\d+\s+из\s+12\b[\s\S]*$/iu;
+  const m = re.exec(t);
+  if (m != null && m.index >= 8) {
+    const cut = t.slice(0, m.index).trim();
+    if (cut.length >= 12) return cut;
+  }
+  return t;
+}
+
 /** Убирает возможный JSON-хвост от старых версий промпта — пользователь видит только прозу. */
 function stripInterpretationForUser(text: string): string {
   let t = text.trim();
@@ -125,7 +137,8 @@ export async function deliverProtocolStep(opts: {
     return;
   }
 
-  const summaryLine = stripInterpretationForUser(interp.interpretationText).slice(0, 240);
+  const interpForUser = stripEchoedNextProtocolQuestion(stripInterpretationForUser(interp.interpretationText));
+  const summaryLine = interpForUser.slice(0, 240);
   const llmRow = await insertLlmCalledAnswerInterpretation(pool, {
     maxUserId,
     sessionId,
@@ -145,7 +158,7 @@ export async function deliverProtocolStep(opts: {
     axis: mapped.axis,
     coordinate: mapped.coordinate,
     llmCallId: llmRow.eventId,
-    interpretationText: interp.interpretationText,
+    interpretationText: interpForUser,
   });
 
   const next = nextQuestionAfter(questionId);
@@ -168,13 +181,12 @@ export async function deliverProtocolStep(opts: {
   });
 
   if (gateIns === 'inserted' && config.maxBotToken) {
-    const interpHuman = stripInterpretationForUser(interp.interpretationText);
-    if (interpHuman.trim().length > 0) {
+    if (interpForUser.trim().length > 0) {
       await sendMaxUserMessage({
         baseUrl: config.maxApiBaseUrl,
         token: config.maxBotToken,
         userId: maxUserId,
-        text: interpHuman,
+        text: interpForUser,
         format: 'markdown',
       });
     }

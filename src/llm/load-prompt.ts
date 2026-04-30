@@ -49,7 +49,7 @@ export type CognitiveInterpretPromptArgs = {
   priorCoordinatesSummary: string;
 };
 
-/** cognitive-interpret-answer@v6 — + итог блока на goal:4 / modality:5 / anchor:3. */
+/** cognitive-interpret-answer@v7 — запрет превью следующего вопроса (гейт «Продолжить»). */
 export async function loadCognitiveInterpretPrompt(args: CognitiveInterpretPromptArgs): Promise<LoadedDialogPrompt> {
   const filePath = path.join(process.cwd(), 'prompts', COGNITIVE_INTERPRET_FILE);
   const raw = await readFile(filePath, 'utf8');
