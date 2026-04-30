@@ -55,7 +55,8 @@ function countGoals(goals: readonly GoalLabel[]): Map<GoalLabel, number> {
 
 /**
  * Сборка блоков Ц/М/Я по §3.2–3.4.
- * При 2:2 первичная цель — та, что проявилась в Ц2 (второй ответ).
+ * Ядро цели: ≥3 голосов за одну цель → single; ровно 2:2 → tie (первичная цель — Ц2);
+ * 2:1:1 → single (первичная — цель с двумя голосами); 1+1+1+1 → unformed.
  */
 export function assembleCoordinates(mapped: ProtocolAnswersMapped): AssembledCoordinates {
   const { goals, modalities, anchors } = mapped;
@@ -72,11 +73,20 @@ export function assembleCoordinates(mapped: ProtocolAnswersMapped): AssembledCoo
     if (top && top[1] >= 3) {
       primaryGoal = top[0];
       coreFormation = 'single';
-    } else if (top && second && top[1] === 2 && second[1] === 2) {
+    } else if (top && second && ranked.length === 2 && top[1] === 2 && second[1] === 2) {
       coreFormation = 'tie';
       const g2 = goals[1];
       primaryGoal = g2;
       secondaryGoal = ranked.find(([g]) => g !== g2)?.[0] ?? null;
+    } else if (
+      top &&
+      ranked.length === 3 &&
+      top[1] === 2 &&
+      ranked[1]?.[1] === 1 &&
+      ranked[2]?.[1] === 1
+    ) {
+      coreFormation = 'single';
+      primaryGoal = top[0];
     } else if (ranked.length >= 4 && ranked.every(([, c]) => c === 1)) {
       coreFormation = 'unformed';
       primaryGoal = null;

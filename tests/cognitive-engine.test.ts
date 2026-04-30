@@ -20,6 +20,17 @@ describe('cognitive-engine', () => {
     expect(c.coreFormation).toBe('single');
   });
 
+  it('assembleCoordinates: 2:1:1 → single, первичная цель с двумя голосами', () => {
+    const mapped: ProtocolAnswersMapped = {
+      goals: ['Истина', 'Истина', 'Понимание', 'Ясность'],
+      modalities: ['А', 'А', 'А', 'М', 'А'],
+      anchors: ['А', 'А', 'А'],
+    };
+    const c = assembleCoordinates(mapped);
+    expect(c.coreFormation).toBe('single');
+    expect(c.primaryGoal).toBe('Истина');
+  });
+
   it('assembleCoordinates: 2:2 → первичная цель из Ц2', () => {
     const mapped: ProtocolAnswersMapped = {
       goals: ['Истина', 'Понимание', 'Истина', 'Понимание'],
