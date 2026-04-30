@@ -72,7 +72,7 @@ describe('cognitive-engine', () => {
     expect(axes.modalityAxis).toBeCloseTo(0.9, 5);
   });
 
-  it('computeConfidenceAxes: якорь 2 из 3 → anchorAxis = 0.8', () => {
+  it('computeConfidenceAxes: якорь 2 из 3, доминанта = primary топ-типа → §4.6 anchorAxis = 0.85', () => {
     const mapped: ProtocolAnswersMapped = {
       goals: ['Истина', 'Истина', 'Истина', 'Истина'],
       modalities: ['А', 'А', 'А', 'М', 'А'],
@@ -81,10 +81,10 @@ describe('cognitive-engine', () => {
     const coords = assembleCoordinates(mapped);
     const m = matchTypes(coords);
     const axes = computeConfidenceAxes(coords, m);
-    expect(axes.anchorAxis).toBe(0.8);
+    expect(axes.anchorAxis).toBe(0.85);
   });
 
-  it('computeConfidenceAxes: три разные буквы, одна = anchorSecondary топ-типа → 0.5', () => {
+  it('computeConfidenceAxes: три разные буквы, одна = якорь топ-типа → §4.6 anchorAxis = 0.4', () => {
     const mapped: ProtocolAnswersMapped = {
       goals: ['Истина', 'Истина', 'Истина', 'Истина'],
       modalities: ['А', 'А', 'А', 'М', 'А'],
@@ -94,7 +94,7 @@ describe('cognitive-engine', () => {
     const m = matchTypes(coords);
     expect(m.matchedTypes[0]?.name).toBe('Empiricist');
     const axes = computeConfidenceAxes(coords, m);
-    expect(axes.anchorAxis).toBe(0.5);
+    expect(axes.anchorAxis).toBe(0.4);
   });
 
   it('computeConfidence: идеальный Architect (tie + профиль типа + логический якорь)', () => {
@@ -124,7 +124,7 @@ describe('cognitive-engine', () => {
     expect(r.confidence).toBeGreaterThanOrEqual(0.9);
   });
 
-  it('computeConfidence: Theorist с одним «М» в модальности — good_match ≈ 0.85', () => {
+  it('computeConfidence: Theorist с одним «М» в модальности — good_match (§4.6 формула)', () => {
     const mapped: ProtocolAnswersMapped = {
       goals: ['Понимание', 'Понимание', 'Понимание', 'Понимание'],
       modalities: ['А', 'А', 'Б', 'М', 'А'],
@@ -134,7 +134,7 @@ describe('cognitive-engine', () => {
     const m = matchTypes(coords);
     const r = computeConfidence(coords, m);
     expect(r.resolution).toBe('good_match');
-    expect(r.confidence).toBeCloseTo(0.85, 5);
+    expect(r.confidence).toBeCloseTo(0.965, 5);
   });
 
   it('computeConfidence: несформированное ядро — unformed, 0.3', () => {
@@ -163,8 +163,36 @@ describe('cognitive-engine', () => {
     const m = matchTypes(coords);
     const r = computeConfidence(coords, m);
     expect(r.resolution).toBe('multiple');
-    expect(r.confidence).toBeCloseTo(0.75, 5);
+    expect(r.confidence).toBeCloseTo(0.735, 3);
     expect(m.matchedTypes.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('computeConfidence: §4.6 Architect single + идеальный профиль + три разных якоря → boundary, C≈0.89', () => {
+    const mapped: ProtocolAnswersMapped = {
+      goals: ['Возможность', 'Возможность', 'Возможность', 'Возможность'],
+      modalities: ['А', 'А', 'Б', 'Б', 'А'],
+      anchors: ['Ж', 'Г', 'З'],
+    };
+    const coords = assembleCoordinates(mapped);
+    const m = matchTypes(coords);
+    expect(m.matchedTypes[0]?.name).toBe('Architect');
+    const r = computeConfidence(coords, m);
+    expect(r.resolution).toBe('boundary');
+    expect(r.confidence).toBeCloseTo(0.89, 5);
+  });
+
+  it('computeConfidence: инвариант §4.6 — weak даёт C < 0.7', () => {
+    const mapped: ProtocolAnswersMapped = {
+      goals: ['Понимание', 'Понимание', 'Понимание', 'Понимание'],
+      modalities: ['А', 'А', 'Б', 'Б', 'А'],
+      anchors: ['А', 'А', 'А'],
+    };
+    const coords = assembleCoordinates(mapped);
+    const m = matchTypes(coords);
+    expect(m.matchedTypes[0]?.name).toBe('Theorist');
+    const r = computeConfidence(coords, m);
+    expect(r.resolution).toBe('weak');
+    expect(r.confidence).toBeLessThan(0.7);
   });
 
   it('matchTypes + computeConfidence на синтетическом Empiricist-профиле', () => {
