@@ -2,7 +2,7 @@
 export const COGNITIVE_PROTOCOL_VERSION = 'v1';
 
 /** Версия промпта cognitive-interpret-answer.md */
-export const COGNITIVE_INTERPRET_PROMPT_VERSION = 'cognitive-interpret-answer@v4';
+export const COGNITIVE_INTERPRET_PROMPT_VERSION = 'cognitive-interpret-answer@v5';
 
 /** Минимальный confidence, чтобы показать имя типа на карте (ниже — только пояснение). */
 export const CARD_CONFIDENCE_THRESHOLD = 0.5;

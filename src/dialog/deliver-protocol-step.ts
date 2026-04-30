@@ -26,7 +26,7 @@ import {
 import { deliverCardComputed } from './deliver-card-computed.js';
 import { dbg, type DomainLogger } from '../util/domain-log.js';
 
-/** Убирает JSON-хвост и типичные markdown-fences вокруг JSON — пользователь видит только прозу. */
+/** Убирает возможный JSON-хвост от старых версий промпта — пользователь видит только прозу. */
 function stripInterpretationForUser(text: string): string {
   let t = text.trim();
   t = t.replace(/\s*`{3}(?:json)?\s*\{[\s\S]*?"coordinate"[\s\S]*?\}\s*`{3}\s*$/u, '');

@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import type { Config } from '../config.js';
-import { COGNITIVE_INTERPRET_PROMPT_VERSION } from '../dialog/protocol-constants.js';
 import type { DomainLogger } from '../util/domain-log.js';
 import { dbg } from '../util/domain-log.js';
 import { loadCognitiveInterpretPrompt } from './load-prompt.js';
@@ -13,39 +12,10 @@ export type InterpretAnswerResult = {
   provider: 'anthropic' | 'openai';
   inputHash: string;
   promptVersion: string;
-  parsedCoordinate?: { axis: string; coordinate: string };
 };
 
 function sha256Hex(s: string): string {
   return createHash('sha256').update(s, 'utf8').digest('hex');
-}
-
-function extractJsonFooter(text: string): { axis: string; coordinate: string } | undefined {
-  const lines = text.trim().split(/\r?\n/);
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i]?.trim();
-    if (!line?.startsWith('{')) continue;
-    try {
-      const o = JSON.parse(line) as { axis?: unknown; coordinate?: unknown };
-      if (typeof o.axis === 'string' && typeof o.coordinate === 'string') {
-        return { axis: o.axis, coordinate: o.coordinate };
-      }
-    } catch {
-      continue;
-    }
-  }
-  const fence = text.match(/\{[\s\S]*"axis"[\s\S]*"coordinate"[\s\S]*\}/);
-  if (fence) {
-    try {
-      const o = JSON.parse(fence[0]) as { axis?: unknown; coordinate?: unknown };
-      if (typeof o.axis === 'string' && typeof o.coordinate === 'string') {
-        return { axis: o.axis, coordinate: o.coordinate };
-      }
-    } catch {
-      return undefined;
-    }
-  }
-  return undefined;
 }
 
 async function callAnthropic(opts: {
@@ -151,18 +121,14 @@ export async function interpretProtocolAnswer(opts: {
     latencyMs: number,
     model: string,
     provider: 'anthropic' | 'openai',
-  ): InterpretAnswerResult => {
-    const parsedCoordinate = extractJsonFooter(text);
-    return {
+  ): InterpretAnswerResult => ({
       interpretationText: text,
       latencyMs,
       model,
       provider,
       inputHash,
       promptVersion,
-      parsedCoordinate,
-    };
-  };
+    });
 
   if (config.anthropicApiKey) {
     try {
