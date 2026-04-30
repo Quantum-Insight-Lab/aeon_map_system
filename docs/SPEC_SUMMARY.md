@@ -8,7 +8,7 @@
 
 **Диалог:** строго 12 вопросов протокола (4×Ц + 5×М + 3×Я); очередь детерминирована методикой; LLM на каждом ответе показывает интерпретацию и в конце сообщения задаёт следующий вопрос; кнопки по числу вариантов методики (8/2/…); персона ÆON.
 
-**LLM:** Claude (`cognitive-interpret-answer@v1`) + OpenAI fallback + DALL·E глиф; mapper детерминированный (без LLM) → `protocol.coordinate_assigned` → LLM-интерпретатор → `answer.interpreted` → следующий вопрос из очереди протокола. Финал: правило-маппер — основной источник истины; LLM-расхождение — в Book of Consciousness.
+**LLM:** Claude (`cognitive-interpret-answer@v1`) + OpenAI fallback + DALL·E глиф; mapper детерминированный (без LLM) → `protocol.coordinate_assigned` → LLM-интерпретатор → `answer.interpreted` → следующий вопрос из очереди протокола. Финал: правило-маппер — единственный источник истины (ADR 002).
 
 **Safety:** Gate 1 в stability/; Gate 2 в system prompt.
 

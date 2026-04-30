@@ -17,8 +17,8 @@
 | **Card** | Вычисленная карта с `confidence`, версией и `protocol_version`. |
 | **AeonProfile** | Read model профиля; пересборка из событий. |
 | **Glyph** | Визуальный символ (DALL·E → `image_url`). |
-| **BookOfConsciousness** | Таймлайн завершённых сессий и LLM-расхождений с правилом (ADR 002). |
-| **LlmCall** | Запись вызова LLM для воспроизводимости (`purpose ∈ {answer_interpretation, rule_reconciliation, ...}`). |
+| **BookOfConsciousness** | Таймлайн завершённых сессий (ADR 002). |
+| **LlmCall** | Запись вызова LLM для воспроизводимости (`purpose=answer_interpretation`). |
 
 Типы карт (`card_type`) — полный перечень в `vibepp.yaml` под `Card.card_types`.
 
@@ -40,7 +40,7 @@
 - Session **порождает** LlmCall.
 - LlmCall **производит** интерпретацию ответа *(показ пользователю; для следующего вопроса используется очередь протокола)*.
 - AeonProfile **связан с** Glyph *(генерация/привязка)*.
-- BookOfConsciousness **фиксирует** Session.completed *и* LLM-расхождения с правилом *(ADR 002)*.
+- BookOfConsciousness **фиксирует** Session.completed *(ADR 002)*.
 
 ---
 

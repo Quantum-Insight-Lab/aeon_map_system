@@ -14,7 +14,7 @@
 - **Protocol Mapper** (бывший signal_classifier): детерминированно маппит выбор пользователя в координату по таблицам методики → `protocol.coordinate_assigned`.
 - **Dialog Engine:** очередь протокола методики; следующий вопрос доставляется в конце сообщения LLM-интерпретатора (одно сообщение пользователю = «интерпретация + следующий вопрос»).
 - **LLM client:** Claude (интерпретатор `cognitive-interpret-answer@v1`), OpenAI fallback, DALL·E для глифа; Gate 2 в system prompt; iter-3 LLM-генерация следующего вопроса — за feature-flag и не используется на Core.
-- **Aeon engine:** при завершении протокола собирает тип по таблице соответствий и алгоритму определения; сверяет с LLM-интерпретациями; выпускает `card.computed` (правило — основной источник истины; LLM-расхождения — в Book of Consciousness).
+- **Aeon engine:** при завершении протокола собирает тип по таблице соответствий и алгоритму определения; выпускает `card.computed` (правило — единственный источник истины; ADR 002).
 - **Read models:** UserProfile, **CoordinateMatchRollup** (вместо CardSignalRollup), AnswerTail, SessionContext, BookOfConsciousness.
 
 ---

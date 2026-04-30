@@ -1,16 +1,19 @@
 import { defineConfig } from 'vitest/config';
+import { loadEnv } from 'vite';
 
-/** Держи в синхроне с scripts/ensure-test-db.mjs (FALLBACK_TEST_URL). */
-const DEFAULT_TEST_DATABASE_URL =
-  'postgres://aeon:aeon@127.0.0.1:5433/aeon_test';
+/** Подхватывает `.env` / `.env.test` как при `vite`, без обязательного `node --env-file` в npm scripts. */
+export default defineConfig(({ mode }) => {
+  const fromFiles = loadEnv(mode, process.cwd(), '');
+  for (const [key, value] of Object.entries(fromFiles)) {
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
 
-export default defineConfig({
-  test: {
-    environment: 'node',
-    include: ['tests/**/*.test.ts'],
-    env: {
-      TEST_DATABASE_URL:
-        process.env.TEST_DATABASE_URL ?? DEFAULT_TEST_DATABASE_URL,
+  return {
+    test: {
+      environment: 'node',
+      include: ['tests/**/*.test.ts'],
     },
-  },
+  };
 });

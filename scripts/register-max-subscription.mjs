@@ -58,7 +58,7 @@ async function postSubscription() {
 
   const body = {
     url: publicUrl,
-    update_types: ['message_created', 'bot_started'],
+    update_types: ['message_created', 'bot_started', 'message_callback'],
   };
   if (secret) {
     if (!/^[a-zA-Z0-9_-]{5,256}$/.test(secret)) {

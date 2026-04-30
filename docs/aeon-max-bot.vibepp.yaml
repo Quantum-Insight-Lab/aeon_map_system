@@ -56,9 +56,10 @@ repository_adr:
         Пороговая модель сигналов (CardSignal, MIN_AGGREGATE_SIGNAL_WEIGHT_FOR_CARD,
         INV-09) исключена; CardSignal → CoordinateMatch; card_signal.received →
         protocol.coordinate_assigned; добавлены answer.interpreted, INV-10,
-        константы COGNITIVE_PROTOCOL_VERSION и LLM_RULE_AGREEMENT_THRESHOLD;
-        BehavioralPatternMap перенесена из Core MVP в iter-5/v1; сквозной signal
-        routing временно отключён; iter-3 LLM-next-question за feature-flag.
+        константа COGNITIVE_PROTOCOL_VERSION; BehavioralPatternMap перенесена
+        из Core MVP в iter-5/v1; сквозной signal routing временно отключён;
+        iter-3 LLM-next-question за feature-flag. Правка 2026-04-30: снят
+        LLM_RULE_AGREEMENT_THRESHOLD и связанная сверка LLM-vs-rule.
 
 # ───────────────────────────────────────────────────────
 # ПОЛЬЗОВАТЕЛИ
@@ -171,7 +172,7 @@ domain_graph:
     - "Session generates LlmCall (интерпретация / сверка)"
     - "LlmCall produces interpretation (показ пользователю; для следующего вопроса используется очередь протокола)"
     - "AeonProfile generates Glyph"
-    - "BookOfConsciousness records Session.completed (и LLM-расхождения с правилом — ADR 002)"
+    - "BookOfConsciousness records Session.completed (ADR 002)"
 
 # ───────────────────────────────────────────────────────
 # ИНВАРИАНТЫ (PDA Step 4)
@@ -188,11 +189,10 @@ invariants:
       enforcement: "append-only table, no UPDATE/DELETE in ORM"
 
     - id: INV-03
-      rule: "Card назначается только при confidence >= CARD_CONFIDENCE_THRESHOLD (default: 0.72)"
+      rule: "Имя типа в payload card.computed скрыто при confidence < CARD_CONFIDENCE_THRESHOLD"
       enforcement: >
-        aeon_engine; confidence в протокольном режиме = мера согласованности
-        координат с типом из таблицы соответствий и/или согласия LLM с правилом
-        (ADR 002).
+        aeon_engine: confidence считается по пути алгоритма §4.2
+        (см. src/aeon/cognitive-engine.ts::computeConfidence).
 
     - id: INV-04
       rule: >
@@ -249,40 +249,20 @@ constants:
   #   - MIN_ANSWERS_PER_LAYER (заменено условием «протокол завершён»)
 
   - key: CARD_CONFIDENCE_THRESHOLD
-    value: 0.72
-    why: >
-      Мера согласованности результата карты: степень совпадения координат
-      пользователя с ближайшим типом из таблицы соответствий методики
-      и/или согласие LLM-интерпретации с детерминированным маппером.
-      Ниже — карта ненадёжна и вводит пользователя в заблуждение.
-    breaks_without: "профиль будет назначаться при противоречивом протоколе"
-    calibration: "A/B по retention и user feedback после профиля"
+    value: 0.5
+    why: "Ниже — в payload card.computed не показываем имя типа, только confidence_message."
+
+  - key: CARD_CONFIDENCE_STRONG_THRESHOLD
+    value: 0.75
+    why: "Выше — пользователю отдаётся короткая строка с типом без оговорок."
 
   - key: MAX_QUESTIONS_PER_SESSION
     value: 12
-    why: >
-      Длина протокола Cognitive v1 (4×Ц + 5×М + 3×Я) совпадает с лимитом
-      сессии. Для карт с более длинными протоколами потребуется отдельная
-      калибровка / разбиение на сессии.
-    breaks_without: "либо дроп в середине, либо протокол не завершается"
-    calibration: "замер session_completion_rate по длинам"
+    why: "Длина протокола Cognitive v1 (4×Ц + 5×М + 3×Я)."
 
   - key: COGNITIVE_PROTOCOL_VERSION
     value: "v1"
-    why: >
-      Фиксирует версию методики Cognitive Identity Map, по которой собрана
-      карта; нужен для аудита и миграций при выходе v2.
-    breaks_without: "карты разных версий протокола нельзя различить в БД"
-    calibration: "обновлять при выпуске новой версии методики"
-
-  - key: LLM_RULE_AGREEMENT_THRESHOLD
-    value: 0.75
-    why: >
-      Нижняя граница согласия LLM-интерпретации с правилом-маппером.
-      Ниже — расхождение записывается в Book of Consciousness как
-      наблюдение (правило остаётся основным источником истины).
-    breaks_without: "тихие расхождения LLM и правила не аудируются"
-    calibration: "после первых 50–100 завершённых протоколов"
+    why: "Версия методики Cognitive Identity Map, по которой собрана карта."
 
   - key: SESSION_IDLE_TIMEOUT_MIN
     value: 30
@@ -337,6 +317,10 @@ events:
       trigger: "бот открыл новую сессию"
       payload: [session_id, layer, question_count_plan]
 
+    - type: protocol.continue_offered
+      trigger: "показана только кнопка «Продолжить»; текст протокольного вопроса — после callback"
+      payload: [session_id, question_id, max_user_id, cognitive_protocol_version]
+
     - type: question.asked
       trigger: "бот отправил вопрос пользователю"
       payload: [session_id, question_id, question_text, layer, llm_call_id]
@@ -361,14 +345,19 @@ events:
       note: "пишется ДО следующего question.asked (INV-10); causation — answer.given"
 
     - type: llm.called
-      trigger: "вызов Claude API (или OpenAI fallback) — интерпретатор или сверка финала"
+      trigger: "вызов Claude API (или OpenAI fallback) — интерпретатор ответа или рендер карты §6"
       payload: [session_id, model, prompt_version, input_hash, latency_ms, purpose]
-      note: "фиксируется до отправки ответа (INV-06); purpose ∈ {answer_interpretation, rule_reconciliation, ...}"
+      note: "фиксируется до отправки ответа (INV-06); purpose ∈ {answer_interpretation, card_render}"
 
     - type: card.computed
       trigger: "aeon_engine собрал карту по протоколу методики (после 12/12 ответов)"
-      payload: [card_type, confidence, input_answer_ids, version, protocol_version, coordinates, matched_types, disagreement_with_llm]
-      note: "ADR 002: source-of-truth — правило (таблица соответствий); LLM-расхождение — в Book of Consciousness."
+      payload: [card_type, confidence, confidence_resolution, confidence_message, input_answer_ids, version, protocol_version, coordinates, matched_types, synthetic_drawing, core_unformed]
+      note: "ADR 002: source-of-truth — правило (таблица соответствий §4.1)."
+
+    - type: card.rendered
+      trigger: "LLM сформировал полный текст карты §6 для пользователя после card.computed"
+      payload: [session_id, max_user_id, card_type, card_text, prompt_version, llm_call_id, protocol_version, version, matched_types, model, provider]
+      note: "идемпотентность card.rendered:${session_id}:${card_type}:${prompt_version}; промпт prompts/cognitive-card-render.md (cognitive-card-render@v2)"
 
     - type: session.completed
       trigger: "сессия завершена (все вопросы отвечены)"
@@ -444,22 +433,20 @@ architecture:
     llm_client:
       role: "вызовы Claude API (интерпретатор протокольного ответа), OpenAI (fallback), промпты"
       responsibilities:
-        - "интерпретатор ответа: показывает пользователю координату, к которой его относит mapper, и почему (prompt cognitive-interpret-answer@v1)"
-        - "сверка финала: сопоставление LLM-интерпретаций с правилом-маппером после 12/12 (purpose=rule_reconciliation)"
+        - "интерпретатор ответа: показывает пользователю координату, к которой его относит mapper (prompt cognitive-interpret-answer@v1)"
         - "версионирование prompt templates"
-        - "логирование каждого вызова (llm.called с polem purpose)"
+        - "логирование каждого вызова (llm.called с purpose)"
         - "fallback: OpenAI при недоступности Claude"
-        - "глиф: OpenAI Images (DALL·E), не смешивать с текстовым Claude без явного разделения"
+        - "глиф: OpenAI Images (DALL·E)"
       must_not: "генерировать следующий протокольный вопрос (он берётся из очереди методики; iter-3 LLM-next-question — за feature-flag)"
 
     aeon_engine:
       role: "вычисление карт, построение профиля; глиф через OpenAI Images"
-      input: "только event store (CoordinateMatch + answer.interpreted данной сессии)"
+      input: "только event store (CoordinateMatch данной сессии)"
       output: "Card, AeonProfile, Glyph"
       responsibilities:
         - "при protocol.coordinate_assigned == полный набор протокола → собрать тип по таблице соответствий методики и алгоритму определения типа"
-        - "сверить LLM-интерпретации с правилом, при расхождении ниже LLM_RULE_AGREEMENT_THRESHOLD — записать наблюдение в Book of Consciousness"
-        - "выпустить card.computed (правило — основной источник истины; ADR 002)"
+        - "выпустить card.computed (правило — единственный источник истины; ADR 002)"
 
     event_core:
       role: "append-only event store"
@@ -473,7 +460,7 @@ architecture:
         - "CoordinateMatchRollup (зафиксированные координаты по протоколам; ADR 002)"
         - "AnswerTail (последние 3–5 ответов для LLM)"
         - "SessionContext (текущее состояние сессии: позиция в протоколе и ответы)"
-        - "BookOfConsciousness (таймлайн + LLM-расхождения с правилом; не в промпт LLM — UI и метрики)"
+        - "BookOfConsciousness (таймлайн; не в промпт LLM — UI и метрики)"
       rebuild: "из event store при необходимости"
 
   data_flow: |
@@ -513,9 +500,8 @@ architecture:
         │
         └── протокол завершён (12/12) ──▶ [Aeon Engine]
                                             │
-                                            ├── собрать тип по таблице соответствий методики
-                                            ├── сверить LLM-интерпретации с правилом (LLM_RULE_AGREEMENT_THRESHOLD)
-                                            │   └── при расхождении — запись в Book of Consciousness
+                                            └── собрать тип по таблице соответствий §4.1
+                                                и алгоритму §4.2 методики
                                             ▼
                                           card.computed ──▶ [Event Core] ──▶ финальные сообщения пользователю
 
@@ -646,9 +632,10 @@ dialog:
     единственный источник вопросов на слое — соответствующий протокол.
   prompts:
     structure: >
-      два промпта на слой: интерпретатор ответа (например
-      cognitive-interpret-answer@v1) и шаблон выдачи следующего вопроса
-      из очереди протокола; общий тон ÆON — в системной части интерпретатора.
+      промпты Cognitive-слоя: интерпретатор ответа протокола (версионируемый файл,
+      например cognitive-interpret-answer@v6); после 12/12 — рендер полной карты §6 для пользователя
+      (prompts/cognitive-card-render.md → cognitive-card-render@v2; purpose llm.called = card_render);
+      для legacy iter-3 — шаблон следующего вопроса (dialog-next-question@v1).
     note: >
       отклонения (не знаю, оффтоп, провокации) обрабатывает интерпретатор —
       не как отдельные продуктовые ветки, а как уточнение в рамках текущего
@@ -864,7 +851,7 @@ rules:
   hard:
     - "НИКОГДА не писать UPDATE или DELETE в таблицу events — только INSERT"
     - "НИКОГДА не пропускать safety Gate 1 перед любым дорогим вызовом (LLM)"
-    - "НИКОГДА не назначать Card без проверки CARD_CONFIDENCE_THRESHOLD"
+    - "НИКОГДА не показывать имя типа в payload card.computed при confidence < CARD_CONFIDENCE_THRESHOLD"
     - "НИКОГДА не назначать Card до завершения её протокола (ADR 002, INV-05)"
     - "НИКОГДА не отправлять следующий question.asked, пока не записан answer.interpreted предыдущего ответа (INV-10)"
     - "НИКОГДА не хранить оригинальный текст пользователя в safety.triggered event"
@@ -929,11 +916,11 @@ iterations:
       - "protocol_mapper: детерминированный маппер выбор → координата"
       - "событие protocol.coordinate_assigned (заменяет card_signal.received)"
       - "prompt cognitive-interpret-answer@v1 + событие answer.interpreted"
-      - "aeon_engine: сборка типа по таблице соответствий методики и алгоритму определения; сверка LLM-vs-rules; запись расхождений в Book of Consciousness"
-      - "card.computed после 12/12 ответов с payload {protocol_version, coordinates, matched_types, disagreement_with_llm}"
+      - "aeon_engine: сборка типа по таблице соответствий методики и алгоритму определения"
+      - "card.computed после 12/12 ответов с payload {protocol_version, coordinates, matched_types, confidence_resolution, confidence_message, synthetic_drawing, core_unformed}"
       - "INV-03, INV-04, INV-05 (новая формулировка), INV-10 — property-based тесты"
       - "iter-3 LLM-генерация следующего вопроса — за feature-flag (не используется на Core)"
-    done_when: "Cognitive-карта назначается только после 12/12 протокольных ответов; правило — основной источник истины"
+    done_when: "Cognitive-карта назначается только после 12/12 протокольных ответов; правило — единственный источник истины"
 
   - id: 5
     name: "MVP профиль"
@@ -971,8 +958,8 @@ accept:
   - "Следующий вопрос берётся из очереди протокола (детерминированно), а не генерируется LLM"
   - "Кризисное сообщение останавливает диалог и предлагает горячую линию"
   - "Дубль MAX update не создаёт дубль события (тест: отправить одинаковый update_id дважды)"
-  - "Card назначается только после 12/12 ответов протокола Cognitive v1; правило-mapper — основной источник истины, LLM-расхождение пишется в Book of Consciousness"
-  - "Card не назначается, если confidence < CARD_CONFIDENCE_THRESHOLD"
+  - "Card назначается только после 12/12 ответов протокола Cognitive v1; правило-mapper — единственный источник истины"
+  - "При confidence < CARD_CONFIDENCE_THRESHOLD имя типа в payload не показывается (только confidence_message)"
   - "Все инварианты покрыты property-based тестами"
   - "После завершения сессии: /profile выдаёт структурированный ÆON-профиль"
   - "AeonProfile пересобирается из event store без потери данных"

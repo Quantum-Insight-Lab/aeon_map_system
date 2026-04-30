@@ -1,5 +1,9 @@
 /** Сырой Update с webhook MAX (см. dev.max.ru docs-api/objects/Update и реальные payload). */
-export type MaxUpdate = MessageCreatedUpdate | BotStartedUpdate | UnknownUpdate;
+export type MaxUpdate =
+  | MessageCreatedUpdate
+  | BotStartedUpdate
+  | MessageCallbackUpdate
+  | UnknownUpdate;
 
 export type UnknownUpdate = {
   update_type: string;
@@ -9,6 +13,20 @@ export type UnknownUpdate = {
   message?: MaxMessage;
   user_locale?: string | null;
 };
+
+/** Нажатие inline-кнопки (callback). */
+export interface MessageCallbackUpdate {
+  update_type: 'message_callback';
+  timestamp: number;
+  update_id?: string | number;
+  callback: {
+    callback_id: string;
+    payload?: string;
+    user?: { user_id?: number; name?: string; is_bot?: boolean };
+  };
+  message?: MaxMessage;
+  user_locale?: string | null;
+}
 
 export interface MessageCreatedUpdate {
   update_type: 'message_created';

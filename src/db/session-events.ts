@@ -1,14 +1,17 @@
 import { v7 as uuidv7 } from 'uuid';
 import type { Pool } from 'pg';
 import { CORE_FIRST_QUESTION_ID, DIALOG_LAYER_CORE } from '../dialog/constants.js';
+import type { ProtocolQuestionId } from '../protocols/cognitive_v1/queue.js';
 import { getPayloadByIdempotencyKey } from './dialog-events.js';
-import { insertEvent } from './insert-event.js';
+import { insertEvent, insertEventWithId } from './insert-event.js';
 
 export type InsertSessionOpenedParams = {
   maxUserId: number;
   sessionId: string;
   /** mid первого message_created, из которого открыли сессию; для bot_started не задавать. */
   openingMessageMid?: string | null;
+  /** Если задан — сессия протокола Cognitive iter-4. */
+  cognitiveProtocolVersion?: string | null;
 };
 
 /** Одна сессия iter-2 на пользователя (идемпотентность). */
@@ -24,6 +27,9 @@ export async function insertSessionOpened(
   };
   if (params.openingMessageMid != null && params.openingMessageMid !== '') {
     payload.opening_message_mid = params.openingMessageMid;
+  }
+  if (params.cognitiveProtocolVersion != null && params.cognitiveProtocolVersion !== '') {
+    payload.cognitive_protocol_version = params.cognitiveProtocolVersion;
   }
 
   return insertEvent(pool, {
@@ -92,8 +98,8 @@ export async function insertAnswerGiven(
     answerType: string;
     maxUpdateId: string;
   },
-): Promise<'inserted' | 'duplicate'> {
-  return insertEvent(pool, {
+): Promise<{ inserted: boolean; eventId: string }> {
+  return insertEventWithId(pool, {
     eventType: 'answer.given',
     actor: { id: String(params.maxUserId), role: 'user' },
     subject: { entity: 'session', id: params.sessionId },
@@ -106,6 +112,62 @@ export async function insertAnswerGiven(
       max_update_id: params.maxUpdateId,
     },
     idempotencyKey: `answer.given:${params.maxUpdateId}`,
+    schemaVersion: 1,
+    correlationId: params.sessionId,
+  });
+}
+
+/** Показана только кнопка «Продолжить»; текст вопроса уйдёт после callback (до `question.asked`). */
+export async function insertProtocolContinueOffered(
+  pool: Pool,
+  params: {
+    maxUserId: number;
+    sessionId: string;
+    questionId: ProtocolQuestionId;
+    cognitiveProtocolVersion: string;
+  },
+): Promise<'inserted' | 'duplicate'> {
+  return insertEvent(pool, {
+    eventType: 'protocol.continue_offered',
+    actor: { id: 'aeon-max-bot', role: 'service' },
+    subject: { entity: 'session', id: params.sessionId },
+    payload: {
+      session_id: params.sessionId,
+      question_id: params.questionId,
+      max_user_id: params.maxUserId,
+      cognitive_protocol_version: params.cognitiveProtocolVersion,
+    },
+    idempotencyKey: `protocol.continue_offered:v1:${params.questionId}:${params.sessionId}`,
+    schemaVersion: 1,
+    correlationId: params.sessionId,
+  });
+}
+
+/** Вопрос протокола Cognitive v1 (без llm_call_id). */
+export async function insertQuestionAskedProtocol(
+  pool: Pool,
+  params: {
+    maxUserId: number;
+    sessionId: string;
+    questionId: ProtocolQuestionId;
+    questionText: string;
+    cognitiveProtocolVersion: string;
+  },
+): Promise<'inserted' | 'duplicate'> {
+  return insertEvent(pool, {
+    eventType: 'question.asked',
+    actor: { id: 'aeon-max-bot', role: 'service' },
+    subject: { entity: 'session', id: params.sessionId },
+    payload: {
+      session_id: params.sessionId,
+      question_id: params.questionId,
+      question_text: params.questionText,
+      layer: DIALOG_LAYER_CORE,
+      llm_call_id: null,
+      max_user_id: params.maxUserId,
+      cognitive_protocol_version: params.cognitiveProtocolVersion,
+    },
+    idempotencyKey: `question.asked:protocol:v1:${params.questionId}:${params.sessionId}`,
     schemaVersion: 1,
     correlationId: params.sessionId,
   });

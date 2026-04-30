@@ -5,10 +5,28 @@ export type Config = {
   maxWebhookSecret: string;
   maxApiBaseUrl: string;
   logLevel: string;
-  /** Статичный первый вопрос Core (iter-2). */
+  /**
+   * Статичный первый вопрос Core (iter-2).
+   * @deprecated iter-4+: активный первый вопрос — протокол goal:1; поле оставлено для совместимости env.
+   */
   firstCoreQuestionText: string;
-  /** Короткое подтверждение после answer.given на core:first. */
+  /** Короткое подтверждение после answer.given на первом шаге протокола (goal:1). */
   dialogAnswerAckText: string;
+  /** Текст до показа протокольного вопроса: только markdown и кнопка «Продолжить». */
+  dialogProtocolContinueGateMarkdown: string;
+  /** Если пользователь пишет текст до нажатия «Продолжить». */
+  dialogAwaitContinueHintText: string;
+  /** iter-3 LLM-цепочка после legacy core:first (не используется при протоколе v1). Default false. */
+  dialogLlmNextQuestion: boolean;
+  cognitiveProtocolVersion: string;
+  /** Минимальная уверенность, чтобы показать имя типа на карте (< порога — только пояснение). */
+  cardConfidenceThreshold: number;
+  /** Уверенное совпадение без оговорок в тексте пользователю. */
+  cardConfidenceStrongThreshold: number;
+  /** Генерировать полную карту §6 через LLM после card.computed (выключить: CARD_RENDER_ENABLED=false). */
+  cardRenderEnabled: boolean;
+  /** Тайм-аут HTTP для рендера карты (мс); по умолчанию LLM_TIMEOUT_MS. */
+  cardRenderTimeoutMs: number;
   anthropicApiKey: string;
   anthropicModel: string;
   openaiApiKey: string;
@@ -31,11 +49,23 @@ export function loadConfig(): Config {
       process.env.FIRST_CORE_QUESTION_TEXT ??
       'Привет! С чего хочешь начать разговор о себе — про работу и цели, про отношения или про ощущение смысла?',
     dialogAnswerAckText: process.env.DIALOG_ANSWER_ACK_TEXT ?? 'Спасибо, ответ записан!',
+    dialogProtocolContinueGateMarkdown:
+      process.env.DIALOG_PROTOCOL_CONTINUE_GATE_MARKDOWN ??
+      'Нажми **«Продолжить»**, чтобы открыть следующий вопрос.',
+    dialogAwaitContinueHintText:
+      process.env.DIALOG_AWAIT_CONTINUE_HINT_TEXT ??
+      'Сначала нажми **«Продолжить»** под сообщением бота — так откроется вопрос.',
     anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
     anthropicModel: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514',
     openaiApiKey: process.env.OPENAI_API_KEY ?? '',
     openaiTextModel: process.env.OPENAI_TEXT_MODEL ?? 'gpt-4o-mini',
     llmTimeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? 45_000),
     llmFollowupCount: Number(process.env.LLM_FOLLOWUP_COUNT ?? 5),
+    dialogLlmNextQuestion: process.env.DIALOG_LLM_NEXT_QUESTION === 'true',
+    cognitiveProtocolVersion: process.env.COGNITIVE_PROTOCOL_VERSION ?? 'v1',
+    cardConfidenceThreshold: Number(process.env.CARD_CONFIDENCE_THRESHOLD ?? '0.5'),
+    cardConfidenceStrongThreshold: Number(process.env.CARD_CONFIDENCE_STRONG_THRESHOLD ?? '0.75'),
+    cardRenderEnabled: process.env.CARD_RENDER_ENABLED !== 'false',
+    cardRenderTimeoutMs: Number(process.env.CARD_RENDER_TIMEOUT_MS ?? process.env.LLM_TIMEOUT_MS ?? '45000'),
   };
 }

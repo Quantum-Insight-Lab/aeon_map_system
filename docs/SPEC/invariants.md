@@ -8,7 +8,7 @@
 |----|---------|-------------|
 | **INV-01** | Session имеет ровно один статус из {active, completed, abandoned, paused}. | domain validator + DB constraint |
 | **INV-02** | Answer неизменяем после записи; редактирование — только новая сессия. | append-only, no UPDATE/DELETE в ORM |
-| **INV-03** | Card назначается только при confidence ≥ CARD_CONFIDENCE_THRESHOLD (0.72). Confidence в протокольном режиме = мера согласованности координат с типом из таблицы соответствий и/или согласия LLM с правилом (ADR 002). | aeon_engine, не LLM |
+| **INV-03** | Имя типа в payload `card.computed` отображается только при `confidence ≥ CARD_CONFIDENCE_THRESHOLD`; иначе вместо типа — `confidence_message`. Confidence считается по формуле §4.6 методики Cognitive Identity Map и инварианту резолюций (см. `src/aeon/cognitive-engine.ts::computeConfidence`; тип — алгоритм §4.2 `matchTypes`). | aeon_engine, не LLM |
 | **INV-04** | Card не в двух взаимоисключающих состояниях без явного флага «синтетический рисунок» (методика допускает множественные типы — §4.3 Cognitive_Identity_Map_v1.md). | domain validator перед записью Card; флаг рисунка — в payload card.computed |
 | **INV-05** | Карта не вычисляется (нет `card.computed`) до завершения её протокола. Для Cognitive v1 — 12/12 ответов протокола. | aeon_engine — проверяет полноту `protocol.coordinate_assigned` по сессии |
 | **INV-06** | LlmCall сохраняется до отправки ответа пользователю, не после. | транзакция: write LlmCall → send message |

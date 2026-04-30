@@ -4,6 +4,8 @@ import { CORE_FIRST_QUESTION_ID, CORE_LLM_QUESTION_RE } from './constants.js';
 import { fetchDialogEventsForUser } from '../db/dialog-events.js';
 import { insertLlmCalled, insertQuestionAskedLlm } from '../db/llm-events.js';
 import { sendMaxUserMessage } from '../integrations/max/client.js';
+import type { DomainLogger } from '../util/domain-log.js';
+import { dbg } from '../util/domain-log.js';
 import { generateNextQuestion } from '../llm/next-question.js';
 import type { DialogState } from './resolve-state.js';
 
@@ -12,7 +14,7 @@ export async function deliverNextLlmQuestion(opts: {
   config: Config;
   maxUserId: number;
   state: Extract<DialogState, { type: 'needs_next_llm' }>;
-  log: { warn: (o: unknown, msg?: string) => void; info: (o: unknown, msg?: string) => void };
+  log: DomainLogger;
 }): Promise<void> {
   const { pool, config, maxUserId, state, log } = opts;
   const { sessionId, lastAnswerQuestionId } = state;
@@ -34,6 +36,7 @@ export async function deliverNextLlmQuestion(opts: {
   }
 
   const rows = await fetchDialogEventsForUser(pool, maxUserId);
+  dbg(log, 'dialog.llm.next_question_generate', { sessionId, llmTurn });
   let gen;
   try {
     gen = await generateNextQuestion({ config, events: rows, sessionId, log });
