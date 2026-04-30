@@ -38,7 +38,7 @@ describe('loadCognitiveCardRenderPrompt', () => {
       anchors: ['Б', 'Б', 'Б'],
     };
     const { body, promptVersion } = await loadCognitiveCardRenderPrompt(cardRenderArgsFromMapped('snap-theorist', mapped));
-    expect(promptVersion).toBe('cognitive-card-render@v1');
+    expect(promptVersion).toBe('cognitive-card-render@v2');
     expect(body).toMatchSnapshot();
   });
 

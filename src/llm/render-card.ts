@@ -63,7 +63,8 @@ async function callAnthropic(opts: {
   }
 }
 
-const CARD_RENDER_MAX_TOKENS = 2048;
+/** Лимит завершения: десять разделов по-русски при разговорном стиле часто >2048 токенов. */
+const CARD_RENDER_MAX_TOKENS = 4096;
 
 /**
  * LLM: полный текст карты §6 методички по координатам сессии.
@@ -72,11 +73,13 @@ export async function renderCognitiveCardMarkdown(opts: {
   config: Config;
   log: DomainLogger;
   promptArgs: CognitiveCardRenderPromptArgs;
+  /** Переопределение таймаута (например скрипт замера latency). */
+  timeoutMs?: number;
 }): Promise<RenderCardResult> {
   const { config, log, promptArgs } = opts;
   const { body: userContent, promptVersion } = await loadCognitiveCardRenderPrompt(promptArgs);
   const inputHash = sha256Hex(userContent);
-  const timeoutMs = config.cardRenderTimeoutMs ?? config.llmTimeoutMs;
+  const timeoutMs = opts.timeoutMs ?? config.cardRenderTimeoutMs ?? config.llmTimeoutMs;
 
   const finish = (
     text: string,

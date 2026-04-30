@@ -357,7 +357,7 @@ events:
     - type: card.rendered
       trigger: "LLM сформировал полный текст карты §6 для пользователя после card.computed"
       payload: [session_id, max_user_id, card_type, card_text, prompt_version, llm_call_id, protocol_version, version, matched_types, model, provider]
-      note: "идемпотентность card.rendered:${session_id}:${card_type}:${prompt_version}; промпт prompts/cognitive-card-render.md (cognitive-card-render@v1)"
+      note: "идемпотентность card.rendered:${session_id}:${card_type}:${prompt_version}; промпт prompts/cognitive-card-render.md (cognitive-card-render@v2)"
 
     - type: session.completed
       trigger: "сессия завершена (все вопросы отвечены)"
@@ -634,7 +634,7 @@ dialog:
     structure: >
       промпты Cognitive-слоя: интерпретатор ответа протокола (версионируемый файл,
       например cognitive-interpret-answer@v6); после 12/12 — рендер полной карты §6 для пользователя
-      (prompts/cognitive-card-render.md → cognitive-card-render@v1; purpose llm.called = card_render);
+      (prompts/cognitive-card-render.md → cognitive-card-render@v2; purpose llm.called = card_render);
       для legacy iter-3 — шаблон следующего вопроса (dialog-next-question@v1).
     note: >
       отклонения (не знаю, оффтоп, провокации) обрабатывает интерпретатор —

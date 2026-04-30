@@ -5,7 +5,7 @@ export const COGNITIVE_PROTOCOL_VERSION = 'v1';
 export const COGNITIVE_INTERPRET_PROMPT_VERSION = 'cognitive-interpret-answer@v7';
 
 /** Версия промпта cognitive-card-render.md (итоговая карта §6 методички). */
-export const COGNITIVE_CARD_RENDER_PROMPT_VERSION = 'cognitive-card-render@v1';
+export const COGNITIVE_CARD_RENDER_PROMPT_VERSION = 'cognitive-card-render@v2';
 
 /** Версия payload события card.rendered. */
 export const COGNITIVE_CARD_RENDERED_VERSION = 'card.rendered@v1';

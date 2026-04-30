@@ -128,7 +128,7 @@ function formatAnchorLettersBlock(letters: readonly string[]): string {
   return lines.join('\n');
 }
 
-/** cognitive-card-render@v1 — полная карта §6 методички после card.computed. */
+/** cognitive-card-render@v2 — полная карта §6 методички после card.computed. */
 export async function loadCognitiveCardRenderPrompt(
   args: CognitiveCardRenderPromptArgs,
 ): Promise<LoadedDialogPrompt> {
