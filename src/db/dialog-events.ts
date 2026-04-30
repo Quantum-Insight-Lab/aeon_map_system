@@ -11,6 +11,7 @@ const DIALOG_EVENT_TYPES = [
   'protocol.coordinate_assigned',
   'answer.interpreted',
   'card.computed',
+  'card.rendered',
 ] as const;
 
 /** События диалога для пользователя MAX (фильтр по payload.max_user_id). */

@@ -1,20 +1,45 @@
 import pg from 'pg';
+import { v7 as uuidv7 } from 'uuid';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PROTOCOL_FIRST_QUESTION_ID } from '../src/protocols/cognitive_v1/queue.js';
+import { PROTOCOL_FIRST_QUESTION_ID, PROTOCOL_QUESTION_IDS } from '../src/protocols/cognitive_v1/queue.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { insertEvent } from '../src/db/insert-event.js';
+import { insertProtocolCoordinateAssigned } from '../src/db/protocol-events.js';
+import { insertAnswerGiven } from '../src/db/session-events.js';
 import { handleMaxWebhook } from '../src/services/webhook-service.js';
+import { deliverCardComputed } from '../src/dialog/deliver-card-computed.js';
+import { COGNITIVE_CARD_TYPE } from '../src/dialog/protocol-constants.js';
+import type { ProtocolAnswersMapped } from '../src/aeon/cognitive-engine.js';
 import type { Config } from '../src/config.js';
 import type { MaxUpdate } from '../src/integrations/max/types.js';
 
 const dsn = process.env.TEST_DATABASE_URL;
 
-function mockLlmFetch(): void {
+function stubFetchInterpretAndCard(): void {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes('platform-api.max.ru')) {
+        return new Response('{}', { status: 200 });
+      }
       if (url.includes('api.anthropic.com')) {
+        const raw = typeof init?.body === 'string' ? init.body : '{}';
+        let userMsg = '';
+        try {
+          const body = JSON.parse(raw) as { messages?: Array<{ content?: string }> };
+          userMsg = String(body.messages?.[0]?.content ?? '');
+        } catch {
+          userMsg = '';
+        }
+        if (userMsg.includes('cognitive_card_render_input_v1')) {
+          const text =
+            '### 1. Координаты\nТест карты.\n\n### 7. Парадокс мыслителя\nВторая часть.';
+          return new Response(JSON.stringify({ content: [{ type: 'text', text }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
         return new Response(
           JSON.stringify({
             content: [
@@ -38,6 +63,46 @@ function mockLlmFetch(): void {
   );
 }
 
+async function seedProtocolFromMapped(
+  pool: pg.Pool,
+  opts: { sessionId: string; maxUserId: number; mapped: ProtocolAnswersMapped },
+): Promise<void> {
+  const { goals, modalities, anchors } = opts.mapped;
+  for (let i = 0; i < PROTOCOL_QUESTION_IDS.length; i++) {
+    const qid = PROTOCOL_QUESTION_IDS[i]!;
+    let axis: string;
+    let coordinate: string;
+    if (i < 4) {
+      axis = 'goal';
+      coordinate = goals[i]!;
+    } else if (i < 9) {
+      axis = 'modality';
+      coordinate = modalities[i - 4]!;
+    } else {
+      axis = 'anchor';
+      coordinate = anchors[i - 9]!;
+    }
+    const ans = await insertAnswerGiven(pool, {
+      maxUserId: opts.maxUserId,
+      sessionId: opts.sessionId,
+      questionId: qid,
+      answerValue: coordinate,
+      answerType: 'protocol_choice',
+      maxUpdateId: `seed:${opts.sessionId}:${qid}`,
+    });
+    await insertProtocolCoordinateAssigned(pool, {
+      sessionId: opts.sessionId,
+      maxUserId: opts.maxUserId,
+      questionId: qid,
+      answerEventId: ans.eventId,
+      cardType: COGNITIVE_CARD_TYPE,
+      axis,
+      coordinate,
+      sourceQuestionId: qid,
+    });
+  }
+}
+
 describe.skipIf(!dsn)('event store (integration)', () => {
   let pool: pg.Pool;
 
@@ -50,6 +115,8 @@ describe.skipIf(!dsn)('event store (integration)', () => {
     logLevel: 'silent',
     firstCoreQuestionText: 'Тестовый первый вопрос?',
     dialogAnswerAckText: 'Ок.',
+    dialogProtocolContinueGateMarkdown: 'Продолжить?',
+    dialogAwaitContinueHintText: 'Жди.',
     anthropicApiKey: 'test-anthropic',
     anthropicModel: 'claude-test',
     openaiApiKey: 'test-openai',
@@ -60,6 +127,8 @@ describe.skipIf(!dsn)('event store (integration)', () => {
     cognitiveProtocolVersion: 'v1',
     cardConfidenceThreshold: 0.5,
     cardConfidenceStrongThreshold: 0.75,
+    cardRenderEnabled: true,
+    cardRenderTimeoutMs: 5000,
   };
 
   const log = {
@@ -77,7 +146,7 @@ describe.skipIf(!dsn)('event store (integration)', () => {
   });
 
   beforeEach(async () => {
-    mockLlmFetch();
+    stubFetchInterpretAndCard();
     await pool.query('TRUNCATE events');
   });
 
@@ -237,5 +306,39 @@ describe.skipIf(!dsn)('event store (integration)', () => {
       [PROTOCOL_FIRST_QUESTION_ID],
     );
     expect(q.rows[0].c).toBe('1');
+  });
+
+  it('iter-5: deliverCardComputed записывает llm.called card_render и card.rendered', async () => {
+    const sessionId = uuidv7();
+    const maxUserId = 99002;
+    const mapped: ProtocolAnswersMapped = {
+      goals: ['Понимание', 'Понимание', 'Понимание', 'Понимание'],
+      modalities: ['А', 'А', 'Б', 'Б', 'А'],
+      anchors: ['Б', 'Б', 'Б'],
+    };
+    await seedProtocolFromMapped(pool, { sessionId, maxUserId, mapped });
+    await deliverCardComputed({
+      pool,
+      config: { ...testConfig, maxBotToken: 'tok' },
+      maxUserId,
+      sessionId,
+      log,
+    });
+    const r = await pool.query<{ event_type: string; purpose: string | null }>(
+      `SELECT event_type, payload->>'purpose' AS purpose FROM events
+       WHERE payload->>'session_id' = $1
+       ORDER BY occurred_at ASC`,
+      [sessionId],
+    );
+    const types = r.rows.map((x) => x.event_type);
+    expect(types).toContain('card.computed');
+    expect(types).toContain('card.rendered');
+    const cardLlm = r.rows.filter((x) => x.event_type === 'llm.called' && x.purpose === 'card_render');
+    expect(cardLlm.length).toBe(1);
+    const rendered = await pool.query<{ card_text: string }>(
+      `SELECT payload->>'card_text' AS card_text FROM events WHERE event_type = 'card.rendered' AND payload->>'session_id' = $1`,
+      [sessionId],
+    );
+    expect(rendered.rows[0]?.card_text ?? '').toContain('Координаты');
   });
 });

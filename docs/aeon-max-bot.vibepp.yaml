@@ -345,14 +345,19 @@ events:
       note: "пишется ДО следующего question.asked (INV-10); causation — answer.given"
 
     - type: llm.called
-      trigger: "вызов Claude API (или OpenAI fallback) — интерпретатор ответа"
+      trigger: "вызов Claude API (или OpenAI fallback) — интерпретатор ответа или рендер карты §6"
       payload: [session_id, model, prompt_version, input_hash, latency_ms, purpose]
-      note: "фиксируется до отправки ответа (INV-06); purpose=answer_interpretation"
+      note: "фиксируется до отправки ответа (INV-06); purpose ∈ {answer_interpretation, card_render}"
 
     - type: card.computed
       trigger: "aeon_engine собрал карту по протоколу методики (после 12/12 ответов)"
       payload: [card_type, confidence, confidence_resolution, confidence_message, input_answer_ids, version, protocol_version, coordinates, matched_types, synthetic_drawing, core_unformed]
       note: "ADR 002: source-of-truth — правило (таблица соответствий §4.1)."
+
+    - type: card.rendered
+      trigger: "LLM сформировал полный текст карты §6 для пользователя после card.computed"
+      payload: [session_id, max_user_id, card_type, card_text, prompt_version, llm_call_id, protocol_version, version, matched_types, model, provider]
+      note: "идемпотентность card.rendered:${session_id}:${card_type}:${prompt_version}; промпт prompts/cognitive-card-render.md (cognitive-card-render@v1)"
 
     - type: session.completed
       trigger: "сессия завершена (все вопросы отвечены)"
@@ -627,9 +632,10 @@ dialog:
     единственный источник вопросов на слое — соответствующий протокол.
   prompts:
     structure: >
-      два промпта на слой: интерпретатор ответа (например
-      cognitive-interpret-answer@v1) и шаблон выдачи следующего вопроса
-      из очереди протокола; общий тон ÆON — в системной части интерпретатора.
+      промпты Cognitive-слоя: интерпретатор ответа протокола (версионируемый файл,
+      например cognitive-interpret-answer@v6); после 12/12 — рендер полной карты §6 для пользователя
+      (prompts/cognitive-card-render.md → cognitive-card-render@v1; purpose llm.called = card_render);
+      для legacy iter-3 — шаблон следующего вопроса (dialog-next-question@v1).
     note: >
       отклонения (не знаю, оффтоп, провокации) обрабатывает интерпретатор —
       не как отдельные продуктовые ветки, а как уточнение в рамках текущего

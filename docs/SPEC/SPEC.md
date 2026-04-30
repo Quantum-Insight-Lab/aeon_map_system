@@ -381,7 +381,7 @@ Fallback при таймауте LLM-интерпретатора — корот
 Детали — в `invariants.md` и `events.md`. Здесь — полный перечень id для валидатора и ревью (после ADR 002):
 
 - **Инварианты:** INV-01, INV-02, INV-03, INV-04, INV-05 (новая формулировка), INV-06, INV-07, INV-08, INV-10, INV-S01, INV-S02. **Удалён:** INV-09.
-- **События:** user.started, session.opened, question.asked, answer.given, **protocol.coordinate_assigned**, **answer.interpreted**, llm.called, card.computed, session.completed, profile.built, safety.triggered, session.abandoned. **Удалён:** card_signal.received.
+- **События:** user.started, session.opened, question.asked, answer.given, **protocol.coordinate_assigned**, **answer.interpreted**, llm.called, card.computed, **card.rendered**, session.completed, profile.built, safety.triggered, session.abandoned. **Удалён:** card_signal.received.
 
 ---
 

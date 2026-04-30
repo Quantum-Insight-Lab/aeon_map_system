@@ -179,6 +179,25 @@ Event store только **INSERT**, контракт полей как в `even
 
 ---
 
+## Issue 5a
+
+**Title:** `[Iter 5] Рендер полной карты §6 через LLM (card.rendered, purpose=card_render)`
+
+**Milestone:** `Iteration 5 — MVP профиль`
+
+**Labels:** `iteration-5`, `mvp`, `area/llm`, `area/dialog`, `area/events`, `priority/p1`
+
+**Description:**
+
+После **`card.computed`** один вызов LLM собирает **полный текст §6** (десять разделов методики) из координат и узких нарративных констант в коде. События **`llm.called`** (`purpose=card_render`, idempotency `llm.called:${session_id}:card.render`) и **`card.rendered`** (`card.rendered:${session_id}:${card_type}:${prompt_version}`). Конфиг: **`CARD_RENDER_ENABLED`**, **`CARD_RENDER_TIMEOUT_MS`**. Fallback — короткая строка как раньше.
+
+**Acceptance criteria:**
+
+- [ ] В DEV после завершения протокола пользователь получает полную карту (или fallback при ошибке/флаге).
+- [ ] В логе событий есть пара `llm.called` + `card.rendered` с согласованными `prompt_version` и `llm_call_id`.
+
+---
+
 ## Issue 6
 
 **Title:** `[Iter 5] MVP профиль: слои I+II+IV, AeonProfile, /profile, Book of Consciousness`

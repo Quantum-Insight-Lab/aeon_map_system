@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { coreLlmQuestionId, DIALOG_LAYER_CORE } from '../dialog/constants.js';
 import { insertEventWithId } from './insert-event.js';
 
-export type LlmPurpose = 'answer_interpretation' | 'dialog_next_question';
+export type LlmPurpose = 'answer_interpretation' | 'dialog_next_question' | 'card_render';
 
 export type InsertLlmCalledParams = {
   maxUserId: number;
@@ -109,6 +109,43 @@ export async function insertLlmCalledAnswerInterpretation(
       question_text: params.summaryText,
       purpose: 'answer_interpretation' satisfies LlmPurpose,
       question_id: params.questionId,
+    },
+    idempotencyKey,
+    schemaVersion: 1,
+    correlationId: params.sessionId,
+  });
+  return { eventId: r.eventId, inserted: r.inserted };
+}
+
+/** LLM-рендер итоговой карты §6. Idempotency: один вызов рендера на сессию. */
+export async function insertLlmCalledCardRender(
+  pool: Pool,
+  params: {
+    maxUserId: number;
+    sessionId: string;
+    model: string;
+    provider: 'anthropic' | 'openai';
+    promptVersion: string;
+    inputHash: string;
+    latencyMs: number;
+    summaryText: string;
+  },
+): Promise<{ eventId: string; inserted: boolean }> {
+  const idempotencyKey = `llm.called:${params.sessionId}:card.render`;
+  const r = await insertEventWithId(pool, {
+    eventType: 'llm.called',
+    actor: { id: 'aeon-max-bot', role: 'service' },
+    subject: { entity: 'session', id: params.sessionId },
+    payload: {
+      session_id: params.sessionId,
+      max_user_id: params.maxUserId,
+      model: params.model,
+      provider: params.provider,
+      prompt_version: params.promptVersion,
+      input_hash: params.inputHash,
+      latency_ms: params.latencyMs,
+      question_text: params.summaryText,
+      purpose: 'card_render' satisfies LlmPurpose,
     },
     idempotencyKey,
     schemaVersion: 1,

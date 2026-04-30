@@ -46,3 +46,47 @@ export async function insertCardComputed(
     correlationId: params.sessionId,
   });
 }
+
+export type InsertCardRenderedParams = {
+  sessionId: string;
+  maxUserId: number;
+  cardType: string;
+  /** Полный markdown текста карты для пользователя. */
+  cardText: string;
+  promptVersion: string;
+  llmCallEventId: string;
+  protocolVersion: string;
+  /** Версия схемы payload card.rendered. */
+  version: string;
+  matchedTypes: readonly string[];
+  model: string;
+  provider: string;
+};
+
+export async function insertCardRendered(
+  pool: Pool,
+  params: InsertCardRenderedParams,
+): Promise<{ eventId: string; inserted: boolean }> {
+  const idempotencyKey = `card.rendered:${params.sessionId}:${params.cardType}:${params.promptVersion}`;
+  return insertEventWithId(pool, {
+    eventType: 'card.rendered',
+    actor: { id: 'aeon-max-bot', role: 'service' },
+    subject: { entity: 'session', id: params.sessionId },
+    payload: {
+      session_id: params.sessionId,
+      max_user_id: params.maxUserId,
+      card_type: params.cardType,
+      card_text: params.cardText,
+      prompt_version: params.promptVersion,
+      llm_call_id: params.llmCallEventId,
+      protocol_version: params.protocolVersion,
+      version: params.version,
+      matched_types: [...params.matchedTypes],
+      model: params.model,
+      provider: params.provider,
+    },
+    idempotencyKey,
+    schemaVersion: 1,
+    correlationId: params.sessionId,
+  });
+}

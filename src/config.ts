@@ -23,6 +23,10 @@ export type Config = {
   cardConfidenceThreshold: number;
   /** Уверенное совпадение без оговорок в тексте пользователю. */
   cardConfidenceStrongThreshold: number;
+  /** Генерировать полную карту §6 через LLM после card.computed (выключить: CARD_RENDER_ENABLED=false). */
+  cardRenderEnabled: boolean;
+  /** Тайм-аут HTTP для рендера карты (мс); по умолчанию LLM_TIMEOUT_MS. */
+  cardRenderTimeoutMs: number;
   anthropicApiKey: string;
   anthropicModel: string;
   openaiApiKey: string;
@@ -61,5 +65,7 @@ export function loadConfig(): Config {
     cognitiveProtocolVersion: process.env.COGNITIVE_PROTOCOL_VERSION ?? 'v1',
     cardConfidenceThreshold: Number(process.env.CARD_CONFIDENCE_THRESHOLD ?? '0.5'),
     cardConfidenceStrongThreshold: Number(process.env.CARD_CONFIDENCE_STRONG_THRESHOLD ?? '0.75'),
+    cardRenderEnabled: process.env.CARD_RENDER_ENABLED !== 'false',
+    cardRenderTimeoutMs: Number(process.env.CARD_RENDER_TIMEOUT_MS ?? process.env.LLM_TIMEOUT_MS ?? '45000'),
   };
 }

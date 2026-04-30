@@ -10,13 +10,16 @@ import type { GoalLabel, AnchorLetter } from '../protocols/cognitive_v1/types.js
 import type { ModalityLetter } from '../protocols/cognitive_v1/types.js';
 import { PROTOCOL_QUESTION_IDS, protocolQuestionIndex } from '../protocols/cognitive_v1/queue.js';
 import { fetchDialogEventsForUser } from '../db/dialog-events.js';
-import { insertCardComputed } from '../db/aeon-events.js';
+import { insertCardComputed, insertCardRendered } from '../db/aeon-events.js';
+import { insertLlmCalledCardRender } from '../db/llm-events.js';
+import { renderCognitiveCardMarkdown } from '../llm/render-card.js';
 import { sendMaxUserMessage } from '../integrations/max/client.js';
 import {
   COGNITIVE_CARD_COMPUTED_VERSION,
+  COGNITIVE_CARD_RENDERED_VERSION,
   COGNITIVE_CARD_TYPE,
-  COGNITIVE_PROTOCOL_VERSION,
 } from './protocol-constants.js';
+import { splitCognitiveCardText } from './split-card-text.js';
 import type { DomainLogger } from '../util/domain-log.js';
 import { dbg } from '../util/domain-log.js';
 
@@ -25,6 +28,7 @@ function coordsPayload(coords: ReturnType<typeof assembleCoordinates>): Record<s
     primary_goal: coords.primaryGoal,
     secondary_goal: coords.secondaryGoal,
     core_formation: coords.coreFormation,
+    goal_votes: [...coords.goalVotes],
     modality_profile: [...coords.modalityProfile],
     anchor_letters: [...coords.anchorLetters],
     dominant_anchor_letter: coords.dominantAnchorLetter,
@@ -106,6 +110,16 @@ export async function deliverCardComputed(opts: {
     matchedNames = [];
   }
 
+  const narrativeMatchedNames = matched.matchedTypes.map((t) => t.name);
+
+  const strongMin = config.cardConfidenceStrongThreshold;
+  const shortLine =
+    matchedNames.length > 0 && matchedNames[0]
+      ? confidence >= strongMin
+        ? `Твой тип по карте: ${matchedNames[0]}.`
+        : `Твой тип по карте: ${matchedNames[0]}. ${confidenceResult.message}`
+      : confidenceResult.message;
+
   const cardIns = await insertCardComputed(pool, {
     sessionId,
     maxUserId,
@@ -115,28 +129,111 @@ export async function deliverCardComputed(opts: {
     confidenceMessage: confidenceResult.message,
     inputAnswerIds: answerIds,
     version: COGNITIVE_CARD_COMPUTED_VERSION,
-    protocolVersion: COGNITIVE_PROTOCOL_VERSION,
+    protocolVersion: config.cognitiveProtocolVersion,
     coordinates: coordsRecord,
     matchedTypes: matchedNames,
     syntheticDrawing: matched.syntheticDrawing,
     coreUnformed,
   });
 
-  if (cardIns.inserted && config.maxBotToken) {
-    const strongMin = config.cardConfidenceStrongThreshold;
-    const line =
-      matchedNames.length > 0 && matchedNames[0]
-        ? confidence >= strongMin
-          ? `Твой тип по карте: ${matchedNames[0]}.`
-          : `Твой тип по карте: ${matchedNames[0]}. ${confidenceResult.message}`
-        : confidenceResult.message;
+  if (!cardIns.inserted) {
+    return;
+  }
+
+  if (!config.maxBotToken) {
+    log.warn('MAX_BOT_TOKEN empty: skip card computed message');
+    return;
+  }
+
+  if (!config.cardRenderEnabled) {
     await sendMaxUserMessage({
       baseUrl: config.maxApiBaseUrl,
       token: config.maxBotToken,
       userId: maxUserId,
-      text: line,
+      text: shortLine,
+      format: 'markdown',
     });
-  } else if (cardIns.inserted && !config.maxBotToken) {
-    log.warn('MAX_BOT_TOKEN empty: skip card computed message');
+    return;
+  }
+
+  try {
+    const rendered = await renderCognitiveCardMarkdown({
+      config,
+      log,
+      promptArgs: {
+        sessionId,
+        coordinates: coordsRecord,
+        matchedTypeNames: narrativeMatchedNames,
+        syntheticDrawing: matched.syntheticDrawing,
+        coreUnformed,
+        confidenceResolution: confidenceResult.resolution,
+        confidenceMessage: confidenceResult.message,
+      },
+    });
+    const summaryLine = rendered.cardMarkdown.slice(0, 240);
+    const llmRow = await insertLlmCalledCardRender(pool, {
+      maxUserId,
+      sessionId,
+      model: rendered.model,
+      provider: rendered.provider,
+      promptVersion: rendered.promptVersion,
+      inputHash: rendered.inputHash,
+      latencyMs: rendered.latencyMs,
+      summaryText: summaryLine || '(card_render)',
+    });
+    if (!llmRow.inserted) {
+      dbg(log, 'dialog.card.render_duplicate_llm', { sessionId });
+      await sendMaxUserMessage({
+        baseUrl: config.maxApiBaseUrl,
+        token: config.maxBotToken,
+        userId: maxUserId,
+        text: shortLine,
+        format: 'markdown',
+      });
+      return;
+    }
+    const renderedIns = await insertCardRendered(pool, {
+      sessionId,
+      maxUserId,
+      cardType: COGNITIVE_CARD_TYPE,
+      cardText: rendered.cardMarkdown,
+      promptVersion: rendered.promptVersion,
+      llmCallEventId: llmRow.eventId,
+      protocolVersion: config.cognitiveProtocolVersion,
+      version: COGNITIVE_CARD_RENDERED_VERSION,
+      matchedTypes: narrativeMatchedNames,
+      model: rendered.model,
+      provider: rendered.provider,
+    });
+    if (!renderedIns.inserted) {
+      dbg(log, 'dialog.card.render_duplicate_event', { sessionId });
+      await sendMaxUserMessage({
+        baseUrl: config.maxApiBaseUrl,
+        token: config.maxBotToken,
+        userId: maxUserId,
+        text: shortLine,
+        format: 'markdown',
+      });
+      return;
+    }
+    const chunks = splitCognitiveCardText(rendered.cardMarkdown);
+    for (const chunk of chunks) {
+      await sendMaxUserMessage({
+        baseUrl: config.maxApiBaseUrl,
+        token: config.maxBotToken,
+        userId: maxUserId,
+        text: chunk,
+        format: 'markdown',
+      });
+    }
+  } catch (e) {
+    log.warn({ err: e }, 'deliverCardComputed: card render failed');
+    await sendMaxUserMessage({
+      baseUrl: config.maxApiBaseUrl,
+      token: config.maxBotToken,
+      userId: maxUserId,
+      text: shortLine,
+      format: 'markdown',
+    });
   }
 }
