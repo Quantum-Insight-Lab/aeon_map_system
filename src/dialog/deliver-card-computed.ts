@@ -23,6 +23,14 @@ import { splitCognitiveCardText } from './split-card-text.js';
 import type { DomainLogger } from '../util/domain-log.js';
 import { dbg } from '../util/domain-log.js';
 
+/** Короткая строка имён типов для fallback после карты (один или несколько совпадений). */
+function formatCardShortTypePrefix(names: readonly string[]): string | null {
+  if (names.length === 0) return null;
+  if (names.length === 1) return `Твой тип по карте: ${names[0]}.`;
+  if (names.length === 2) return `Твои типы по карте: ${names[0]} и ${names[1]}.`;
+  return `Твои типы по карте: ${names[0]}, ${names[1]} и ${names[2]}.`;
+}
+
 function coordsPayload(coords: ReturnType<typeof assembleCoordinates>): Record<string, unknown> {
   return {
     primary_goal: coords.primaryGoal,
@@ -113,11 +121,12 @@ export async function deliverCardComputed(opts: {
   const narrativeMatchedNames = matched.matchedTypes.map((t) => t.name);
 
   const strongMin = config.cardConfidenceStrongThreshold;
+  const typePrefix = formatCardShortTypePrefix(matchedNames);
   const shortLine =
-    matchedNames.length > 0 && matchedNames[0]
+    typePrefix != null
       ? confidence >= strongMin
-        ? `Твой тип по карте: ${matchedNames[0]}.`
-        : `Твой тип по карте: ${matchedNames[0]}. ${confidenceResult.message}`
+        ? typePrefix
+        : `${typePrefix} ${confidenceResult.message}`
       : confidenceResult.message;
 
   const cardIns = await insertCardComputed(pool, {

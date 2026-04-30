@@ -206,6 +206,21 @@ describe('cognitive-engine', () => {
     expect(r.confidence).toBeLessThan(0.7);
   });
 
+  it('computeConfidence: одно ядро цели + syntheticDrawing (два типа в топе) → multiple', () => {
+    const mapped: ProtocolAnswersMapped = {
+      goals: ['Возможность', 'Согласованность', 'Возможность', 'Возможность'],
+      modalities: ['А', 'М', 'Б', 'М', 'М'],
+      anchors: ['Б', 'Ж', 'В'],
+    };
+    const coords = assembleCoordinates(mapped);
+    expect(coords.coreFormation).toBe('single');
+    const m = matchTypes(coords);
+    expect(m.syntheticDrawing).toBe(true);
+    expect(m.matchedTypes.length).toBeGreaterThanOrEqual(2);
+    const r = computeConfidence(coords, m);
+    expect(r.resolution).toBe('multiple');
+  });
+
   it('matchTypes + computeConfidence на синтетическом Empiricist-профиле', () => {
     const mapped: ProtocolAnswersMapped = {
       goals: ['Истина', 'Истина', 'Истина', 'Истина'],

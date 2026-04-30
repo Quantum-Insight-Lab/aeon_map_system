@@ -49,7 +49,7 @@ function truncateBtn(text: string): string {
 
 /**
  * Цели и якорь: две строки по 4 callback-кнопки (ключ на кнопке = цифра или буква).
- * Модальность: одна строка — А, Б, Среднее (payload по-прежнему ключ А / Б / М).
+ * Модальность: одна строка — А, Б, Среднее М (payload по-прежнему ключ А / Б / М).
  */
 export function protocolQuestionKeyboardAttachment(q: ProtocolQuestion): MaxInlineKeyboardAttachment {
   const questionIndex = protocolQuestionIndex(q.id);
@@ -77,7 +77,7 @@ export function protocolQuestionKeyboardAttachment(q: ProtocolQuestion): MaxInli
   }
 
   if (q.axis === 'modality') {
-    const labels: readonly string[] = ['А', 'Б', 'Среднее'];
+    const labels: readonly string[] = ['А', 'Б', 'М'];
     return {
       type: 'inline_keyboard',
       payload: {

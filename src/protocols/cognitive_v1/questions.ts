@@ -98,7 +98,7 @@ function modalityVariants(a: string, b: string, mid: string): readonly ProtocolV
   return [
     { key: 'А', text: `А: ${a}` },
     { key: 'Б', text: `Б: ${b}` },
-    { key: 'М', text: `Среднее: ${mid}` },
+    { key: 'М', text: `М: ${mid}` },
   ];
 }
 

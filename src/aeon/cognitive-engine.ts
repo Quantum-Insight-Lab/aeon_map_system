@@ -426,6 +426,8 @@ function resolveConfidenceResolution46(
   }
 
   if (coords.coreFormation === 'single') {
+    /** Два и более типа с одинаковой посадкой по модальности (§4.2) — явный «рисунок», даже при одном ядре цели. */
+    if (matched.syntheticDrawing && matched.matchedTypes.length >= 2) return 'multiple';
     if (mF >= CLEAN_MATCH_MF_THRESHOLD && primTier) return 'clean_match';
     if (mF >= 0.7 && primTier) return 'good_match';
     if (mF >= 0.7 && secTier) return 'anchor_secondary';
