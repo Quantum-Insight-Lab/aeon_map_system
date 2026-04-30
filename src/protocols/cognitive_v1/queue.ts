@@ -29,6 +29,18 @@ export function isProtocolQuestionId(questionId: string): questionId is Protocol
   return PROTOCOL_QUESTION_IDS.includes(questionId as ProtocolQuestionId);
 }
 
+/** Последний вопрос блока Ц / М / Я — после ответа нужен развёрнутый итог блока в интерпретации LLM. */
+export type ProtocolBlockKind = 'goal' | 'modality' | 'anchor';
+
+/** `null`, если это не завершение блока (не goal:4 / modality:5 / anchor:3). */
+export function protocolBlockClosure(questionId: string): ProtocolBlockKind | null {
+  const i = protocolQuestionIndex(questionId);
+  if (i === 3) return 'goal';
+  if (i === 8) return 'modality';
+  if (i === 11) return 'anchor';
+  return null;
+}
+
 /** Следующий вопрос после текущего или `null`, если протокол завершён после ответа на последний. */
 export function nextQuestionAfter(currentId: string): ProtocolQuestionId | null {
   const i = protocolQuestionIndex(currentId);

@@ -6,6 +6,7 @@ import {
   formatProtocolQuestionForInterpretPrompt,
   getProtocolQuestion,
 } from '../protocols/cognitive_v1/questions.js';
+import { protocolBlockClosure } from '../protocols/cognitive_v1/queue.js';
 
 const PROMPT_FILE = 'dialog-next-question.md';
 const COGNITIVE_INTERPRET_FILE = 'cognitive-interpret-answer.md';
@@ -34,7 +35,7 @@ export type CognitiveInterpretPromptArgs = {
   priorCoordinatesSummary: string;
 };
 
-/** cognitive-interpret-answer@v5 — интерпретация одного ответа протокола (контекст вопроса + методика). */
+/** cognitive-interpret-answer@v6 — + итог блока на goal:4 / modality:5 / anchor:3. */
 export async function loadCognitiveInterpretPrompt(args: CognitiveInterpretPromptArgs): Promise<LoadedDialogPrompt> {
   const filePath = path.join(process.cwd(), 'prompts', COGNITIVE_INTERPRET_FILE);
   const raw = await readFile(filePath, 'utf8');
@@ -53,6 +54,19 @@ export async function loadCognitiveInterpretPrompt(args: CognitiveInterpretPromp
   body += `Результат mapper (эталон — не оспаривай):\n`;
   body += `mapped_axis: ${args.mappedAxis}\n`;
   body += `mapped_coordinate: ${args.mappedCoordinate}\n\n`;
+
+  const closure = protocolBlockClosure(args.questionId);
+  if (closure === 'goal') {
+    body +=
+      'Режим шага: ПОДВЕДЕНИЕ ИТОГА БЛОКА «Цели» (Ц1–Ц4 завершены). Используй раздел «Итог блока» в инструкции выше.\n\n';
+  } else if (closure === 'modality') {
+    body +=
+      'Режим шага: ПОДВЕДЕНИЕ ИТОГА БЛОКА «Модальность» (М1–М5 завершены). Используй раздел «Итог блока» в инструкции выше.\n\n';
+  } else if (closure === 'anchor') {
+    body +=
+      'Режим шага: ПОДВЕДЕНИЕ ИТОГА БЛОКА «Якорь» (Я1–Я3 завершены; это последний шаг протокола перед сборкой карты). Используй раздел «Итог блока» в инструкции выше.\n\n';
+  }
+
   body += `Ответ пользователя (как в сообщении):\n${args.answerText}\n`;
   return { body, promptVersion: COGNITIVE_INTERPRET_PROMPT_VERSION };
 }
