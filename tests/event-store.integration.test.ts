@@ -11,9 +11,29 @@ import { deliverCardComputed } from '../src/dialog/deliver-card-computed.js';
 import { COGNITIVE_CARD_TYPE } from '../src/dialog/protocol-constants.js';
 import type { ProtocolAnswersMapped } from '../src/aeon/cognitive-engine.js';
 import type { Config } from '../src/config.js';
-import type { MaxUpdate } from '../src/integrations/max/types.js';
+import type { MaxUpdate, MessageCallbackUpdate } from '../src/integrations/max/types.js';
+import { PROTOCOL_CONTINUE_CALLBACK_PAYLOAD, buildProtocolAnswerPayload } from '../src/integrations/max/keyboard.js';
 
 const dsn = process.env.TEST_DATABASE_URL;
+
+function messageCallback(opts: {
+  timestamp: number;
+  updateId: string;
+  callbackId: string;
+  userId: number;
+  payload: string;
+}): MessageCallbackUpdate {
+  return {
+    update_type: 'message_callback',
+    timestamp: opts.timestamp,
+    update_id: opts.updateId,
+    callback: {
+      callback_id: opts.callbackId,
+      payload: opts.payload,
+      user: { user_id: opts.userId },
+    },
+  };
+}
 
 function stubFetchInterpretAndCard(): void {
   vi.stubGlobal(
@@ -200,7 +220,7 @@ describe.skipIf(!dsn)('event store (integration)', () => {
     expect(r.rows[0].c).toBe('1');
   });
 
-  it('iter-2: first message creates session.opened and question.asked', async () => {
+  it('iter-4: первое сообщение — session + ворота «Продолжить» (ещё без question.asked)', async () => {
     const u1: MaxUpdate = {
       update_type: 'message_created',
       timestamp: 1,
@@ -217,11 +237,11 @@ describe.skipIf(!dsn)('event store (integration)', () => {
     expect(types.rows.map((r) => r.event_type)).toEqual([
       'user.started',
       'session.opened',
-      'question.asked',
+      'protocol.continue_offered',
     ]);
   });
 
-  it('iter-2: second message appends answer.given', async () => {
+  it('iter-4: continue + callback ответа на Ц1 — цепочка до следующего ворота', async () => {
     const u1: MaxUpdate = {
       update_type: 'message_created',
       timestamp: 1,
@@ -231,29 +251,36 @@ describe.skipIf(!dsn)('event store (integration)', () => {
         sender: { user_id: 9101, is_bot: false },
       },
     };
-    const u2: MaxUpdate = {
-      update_type: 'message_created',
+    const uContinue = messageCallback({
       timestamp: 2,
-      message: {
-        timestamp: 2,
-        body: { mid: 'mid-iter2-b', text: '1' },
-        sender: { user_id: 9101, is_bot: false },
-      },
-    };
+      updateId: 'cb-cont-9101',
+      callbackId: 'cid-cont-9101',
+      userId: 9101,
+      payload: PROTOCOL_CONTINUE_CALLBACK_PAYLOAD,
+    });
+    const uGoal1 = messageCallback({
+      timestamp: 3,
+      updateId: 'cb-g1-9101',
+      callbackId: 'cid-g1-9101',
+      userId: 9101,
+      payload: buildProtocolAnswerPayload(0, '1'),
+    });
     await handleMaxWebhook({ config: testConfig, pool, update: u1, log });
-    await handleMaxWebhook({ config: testConfig, pool, update: u2, log });
+    await handleMaxWebhook({ config: testConfig, pool, update: uContinue, log });
+    await handleMaxWebhook({ config: testConfig, pool, update: uGoal1, log });
     const types = await pool.query<{ event_type: string }>(
       `SELECT event_type FROM events ORDER BY occurred_at`,
     );
     expect(types.rows.map((r) => r.event_type)).toEqual([
       'user.started',
       'session.opened',
+      'protocol.continue_offered',
       'question.asked',
       'answer.given',
       'protocol.coordinate_assigned',
       'llm.called',
       'answer.interpreted',
-      'question.asked',
+      'protocol.continue_offered',
     ]);
     const ans = await pool.query<{ answer_value: string }>(
       `SELECT payload->>'answer_value' AS answer_value FROM events WHERE event_type = 'answer.given'`,
@@ -261,7 +288,7 @@ describe.skipIf(!dsn)('event store (integration)', () => {
     expect(ans.rows[0].answer_value).toBe('1');
   });
 
-  it('iter-2: duplicate answer webhook does not duplicate answer.given', async () => {
+  it('iter-4: повтор того же callback-ответа не дублирует answer.given', async () => {
     const u1: MaxUpdate = {
       update_type: 'message_created',
       timestamp: 1,
@@ -271,23 +298,29 @@ describe.skipIf(!dsn)('event store (integration)', () => {
         sender: { user_id: 9102, is_bot: false },
       },
     };
-    const u2: MaxUpdate = {
-      update_type: 'message_created',
+    const uContinue = messageCallback({
       timestamp: 2,
-      message: {
-        timestamp: 2,
-        body: { mid: 'mid-iter2-d2', text: 'ans' },
-        sender: { user_id: 9102, is_bot: false },
-      },
-    };
+      updateId: 'cb-cont-9102',
+      callbackId: 'cid-cont-9102',
+      userId: 9102,
+      payload: PROTOCOL_CONTINUE_CALLBACK_PAYLOAD,
+    });
+    const uAns = messageCallback({
+      timestamp: 3,
+      updateId: 'cb-dup-9102',
+      callbackId: 'cid-dup-9102',
+      userId: 9102,
+      payload: buildProtocolAnswerPayload(0, '6'),
+    });
     await handleMaxWebhook({ config: testConfig, pool, update: u1, log });
-    await handleMaxWebhook({ config: testConfig, pool, update: u2, log });
-    await handleMaxWebhook({ config: testConfig, pool, update: u2, log });
+    await handleMaxWebhook({ config: testConfig, pool, update: uContinue, log });
+    await handleMaxWebhook({ config: testConfig, pool, update: uAns, log });
+    await handleMaxWebhook({ config: testConfig, pool, update: uAns, log });
     const c = await pool.query<{ c: string }>(`SELECT count(*)::text AS c FROM events WHERE event_type = 'answer.given'`);
     expect(c.rows[0].c).toBe('1');
   });
 
-  it('iter-2: duplicate first message does not insert answer.given', async () => {
+  it('iter-4: дубль первого message_created не создаёт answer.given; question.asked после ворот ещё нет', async () => {
     const u1: MaxUpdate = {
       update_type: 'message_created',
       timestamp: 1,
@@ -305,7 +338,7 @@ describe.skipIf(!dsn)('event store (integration)', () => {
       `SELECT count(*)::text AS c FROM events WHERE event_type = 'question.asked' AND payload->>'question_id' = $1`,
       [PROTOCOL_FIRST_QUESTION_ID],
     );
-    expect(q.rows[0].c).toBe('1');
+    expect(q.rows[0].c).toBe('0');
   });
 
   it('iter-5: deliverCardComputed записывает llm.called card_render и card.rendered', async () => {
@@ -340,5 +373,72 @@ describe.skipIf(!dsn)('event store (integration)', () => {
       [sessionId],
     );
     expect(rendered.rows[0]?.card_text ?? '').toContain('Координаты');
+
+    const link = await pool.query<{ llm_call_id: string; event_id: string }>(
+      `SELECT cr.payload->>'llm_call_id' AS llm_call_id, ll.event_id::text AS event_id
+       FROM events cr
+       JOIN events ll ON ll.event_id::text = cr.payload->>'llm_call_id'
+       WHERE cr.event_type = 'card.rendered'
+         AND ll.event_type = 'llm.called'
+         AND cr.payload->>'session_id' = $1`,
+      [sessionId],
+    );
+    expect(link.rows.length).toBe(1);
+    expect(link.rows[0]!.llm_call_id).toBe(link.rows[0]!.event_id);
+  });
+
+  it('iter-4 INV-03: card.computed без имён типов при confidence ниже CARD_CONFIDENCE_THRESHOLD', async () => {
+    const sessionId = uuidv7();
+    const maxUserId = 99003;
+    const mapped: ProtocolAnswersMapped = {
+      goals: ['Истина', 'Понимание', 'Ясность', 'Решение'],
+      modalities: ['А', 'А', 'А', 'М', 'А'],
+      anchors: ['Б', 'Б', 'Б'],
+    };
+    await seedProtocolFromMapped(pool, { sessionId, maxUserId, mapped });
+    await deliverCardComputed({
+      pool,
+      config: { ...testConfig, maxBotToken: '', cardRenderEnabled: false },
+      maxUserId,
+      sessionId,
+      log,
+    });
+    const row = await pool.query<{ matched_types: unknown; confidence: string | null }>(
+      `SELECT payload->'matched_types' AS matched_types, payload->>'confidence' AS confidence
+       FROM events
+       WHERE event_type = 'card.computed' AND payload->>'session_id' = $1`,
+      [sessionId],
+    );
+    expect(row.rows.length).toBe(1);
+    expect(Number(row.rows[0]!.confidence)).toBeLessThan(testConfig.cardConfidenceThreshold);
+    expect(row.rows[0]!.matched_types).toEqual([]);
+  });
+
+  it('iter-4 INV-04: card.computed synthetic_drawing=true при синтетическом двойном рисунке', async () => {
+    const sessionId = uuidv7();
+    const maxUserId = 99004;
+    const mapped: ProtocolAnswersMapped = {
+      goals: ['Возможность', 'Согласованность', 'Возможность', 'Возможность'],
+      modalities: ['А', 'М', 'Б', 'М', 'М'],
+      anchors: ['Б', 'Ж', 'В'],
+    };
+    await seedProtocolFromMapped(pool, { sessionId, maxUserId, mapped });
+    await deliverCardComputed({
+      pool,
+      config: { ...testConfig, maxBotToken: '', cardRenderEnabled: false },
+      maxUserId,
+      sessionId,
+      log,
+    });
+    const row = await pool.query<{ synthetic_drawing: string | null; matched_len: string | null }>(
+      `SELECT payload->>'synthetic_drawing' AS synthetic_drawing,
+              jsonb_array_length(payload->'matched_types')::text AS matched_len
+       FROM events
+       WHERE event_type = 'card.computed' AND payload->>'session_id' = $1`,
+      [sessionId],
+    );
+    expect(row.rows.length).toBe(1);
+    expect(row.rows[0]!.synthetic_drawing).toBe('true');
+    expect(Number(row.rows[0]!.matched_len)).toBeGreaterThanOrEqual(2);
   });
 });

@@ -1,13 +1,47 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import type { DialogEventRow } from '../src/dialog/resolve-state.js';
+import type { DialogEventRow } from '../../src/dialog/resolve-state.js';
+import {
+  assembleCoordinates,
+  computeConfidence,
+  matchTypes,
+  type ProtocolAnswersMapped,
+} from '../../src/aeon/cognitive-engine.js';
 
 function row(type: string, payload: Record<string, unknown>): DialogEventRow {
   return { event_type: type, payload };
 }
 
 describe('invariants cognitive (INV-03/04/05/10 упрощённые)', () => {
-  it('INV-03: payload card.computed имеет confidence при наличии события', () => {
+  it('INV-03: при confidence ниже порога имена типов не попадают в matched_types карты (политика как deliverCardComputed)', () => {
+    const threshold = 0.5;
+    const unformed: ProtocolAnswersMapped = {
+      goals: ['Истина', 'Понимание', 'Ясность', 'Решение'],
+      modalities: ['А', 'А', 'А', 'М', 'А'],
+      anchors: ['Б', 'Б', 'Б'],
+    };
+    const assembled = assembleCoordinates(unformed);
+    const matched = matchTypes(assembled);
+    const { confidence } = computeConfidence(assembled, matched);
+    let matchedNames = matched.matchedTypes.map((t) => t.name);
+    if (confidence < threshold) matchedNames = [];
+    expect(confidence).toBeLessThan(threshold);
+    expect(matched.matchedTypes.length).toBeGreaterThan(0);
+    expect(matchedNames).toEqual([]);
+  });
+
+  it('INV-04: synthetic_drawing=true при синтетическом двойном рисунке (§4.2)', () => {
+    const mapped: ProtocolAnswersMapped = {
+      goals: ['Возможность', 'Согласованность', 'Возможность', 'Возможность'],
+      modalities: ['А', 'М', 'Б', 'М', 'М'],
+      anchors: ['Б', 'Ж', 'В'],
+    };
+    const m = matchTypes(assembleCoordinates(mapped));
+    expect(m.syntheticDrawing).toBe(true);
+    expect(m.matchedTypes.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('INV-03 (схема): confidence в допустимом диапазоне', () => {
     fc.assert(
       fc.property(fc.double({ min: 0, max: 1, noNaN: true }), (confidence) => {
         const e = row('card.computed', {
