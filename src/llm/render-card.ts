@@ -110,6 +110,13 @@ export async function renderCognitiveCardMarkdown(opts: {
         timeoutMs,
         maxTokens: CARD_RENDER_MAX_TOKENS,
       });
+      dbg(log, 'dialog.llm.card_render_done', {
+        sessionId: promptArgs.sessionId,
+        provider: 'anthropic',
+        model: config.anthropicModel,
+        latencyMs,
+        promptVersion,
+      });
       return finish(text, latencyMs, config.anthropicModel, 'anthropic');
     } catch (e) {
       log.warn({ err: e, stage: 'anthropic' }, 'card_render: anthropic failed');
@@ -136,7 +143,15 @@ export async function renderCognitiveCardMarkdown(opts: {
         signal: ctrl.signal,
         maxTokens: CARD_RENDER_MAX_TOKENS,
       });
-      return finish(text, Date.now() - t0, config.openaiTextModel, 'openai');
+      const latencyMs = Date.now() - t0;
+      dbg(log, 'dialog.llm.card_render_done', {
+        sessionId: promptArgs.sessionId,
+        provider: 'openai',
+        model: config.openaiTextModel,
+        latencyMs,
+        promptVersion,
+      });
+      return finish(text, latencyMs, config.openaiTextModel, 'openai');
     } finally {
       clearTimeout(timer);
     }

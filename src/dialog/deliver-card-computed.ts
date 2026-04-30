@@ -235,6 +235,12 @@ export async function deliverCardComputed(opts: {
         format: 'markdown',
       });
     }
+    dbg(log, 'dialog.card.sent', {
+      sessionId,
+      maxUserId,
+      chunks: chunks.length,
+      cardChars: rendered.cardMarkdown.length,
+    });
   } catch (e) {
     log.warn({ err: e }, 'deliverCardComputed: card render failed');
     await sendMaxUserMessage({
