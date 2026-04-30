@@ -60,7 +60,6 @@ describe.skipIf(!dsn)('event store (integration)', () => {
     cognitiveProtocolVersion: 'v1',
     cardConfidenceThreshold: 0.5,
     cardConfidenceStrongThreshold: 0.75,
-    llmRuleAgreementThreshold: 0.7,
   };
 
   const log = {

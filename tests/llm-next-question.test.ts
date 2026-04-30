@@ -16,7 +16,6 @@ const baseConfig: Config = {
   cognitiveProtocolVersion: 'v1',
   cardConfidenceThreshold: 0.5,
   cardConfidenceStrongThreshold: 0.75,
-  llmRuleAgreementThreshold: 0.7,
   anthropicApiKey: 'k',
   anthropicModel: 'claude-x',
   openaiApiKey: 'ok',

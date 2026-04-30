@@ -349,27 +349,3 @@ export function computeConfidence(coords: AssembledCoordinates, matched: MatchTy
   return { confidence: 0.4, resolution: 'weak', message: CONF_MESSAGES.weak };
 }
 
-export type InterpretedStep = {
-  questionId: string;
-  axis: string;
-  coordinate: string;
-};
-
-/** Доля шагов, где интерпретация LLM совпала с координатой mapper (по строке coordinate). */
-export function computeAgreement(
-  mapper: readonly InterpretedStep[],
-  interpreted: readonly InterpretedStep[],
-): number {
-  const byQ = new Map(mapper.map((m) => [m.questionId, m]));
-  let ok = 0;
-  let total = 0;
-  for (const i of interpreted) {
-    const m = byQ.get(i.questionId);
-    if (!m) continue;
-    total++;
-    if (m.coordinate === i.coordinate && m.axis === i.axis) {
-      ok++;
-    }
-  }
-  return total === 0 ? 1 : ok / total;
-}

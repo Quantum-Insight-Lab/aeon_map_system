@@ -2,10 +2,8 @@ import type { Pool } from 'pg';
 import type { Config } from '../config.js';
 import {
   assembleCoordinates,
-  computeAgreement,
   computeConfidence,
   matchTypes,
-  type InterpretedStep,
   type ProtocolAnswersMapped,
 } from '../aeon/cognitive-engine.js';
 import type { GoalLabel, AnchorLetter } from '../protocols/cognitive_v1/types.js';
@@ -44,7 +42,6 @@ export async function deliverCardComputed(opts: {
   const rows = await fetchDialogEventsForUser(pool, maxUserId);
 
   const byQuestionCoord = new Map<string, { axis: string; coordinate: string }>();
-  const mapperSteps: InterpretedStep[] = [];
   for (const e of rows) {
     if (e.event_type !== 'protocol.coordinate_assigned') continue;
     if (String(e.payload.session_id) !== sessionId) continue;
@@ -53,18 +50,6 @@ export async function deliverCardComputed(opts: {
     const coordinate = String(e.payload.coordinate ?? '');
     if (!qid || !axis) continue;
     byQuestionCoord.set(qid, { axis, coordinate });
-    mapperSteps.push({ questionId: qid, axis, coordinate });
-  }
-
-  const interpretedSteps: InterpretedStep[] = [];
-  for (const e of rows) {
-    if (e.event_type !== 'answer.interpreted') continue;
-    if (String(e.payload.session_id) !== sessionId) continue;
-    interpretedSteps.push({
-      questionId: String(e.payload.question_id ?? ''),
-      axis: String(e.payload.axis ?? ''),
-      coordinate: String(e.payload.coordinate ?? ''),
-    });
   }
 
   const goals: GoalLabel[] = [];
@@ -93,7 +78,6 @@ export async function deliverCardComputed(opts: {
   const matched = matchTypes(assembled);
   const confidenceResult = computeConfidence(assembled, matched);
   const confidence = confidenceResult.confidence;
-  const agreement = computeAgreement(mapperSteps, interpretedSteps);
 
   const coordsRecord = coordsPayload(assembled);
 
@@ -107,16 +91,12 @@ export async function deliverCardComputed(opts: {
     }
   }
 
-  const disagreementWithLlm = agreement < config.llmRuleAgreementThreshold;
-
   dbg(log, 'dialog.card.compute', {
     sessionId,
     maxUserId,
     confidence,
     confidenceResolution: confidenceResult.resolution,
-    agreement,
     matchedTypes: matched.matchedTypes.map((t) => t.name),
-    disagreementWithLlm,
     coreUnformedPreview: assembled.coreFormation === 'unformed',
   });
 
@@ -138,7 +118,6 @@ export async function deliverCardComputed(opts: {
     protocolVersion: COGNITIVE_PROTOCOL_VERSION,
     coordinates: coordsRecord,
     matchedTypes: matchedNames,
-    disagreementWithLlm,
     syntheticDrawing: matched.syntheticDrawing,
     coreUnformed,
   });

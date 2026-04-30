@@ -154,7 +154,7 @@ Event store только **INSERT**, контракт полей как в `even
 
 **ADR:** [`docs/ADR/002-cognitive-protocol-mode.md`](ADR/002-cognitive-protocol-mode.md). Iter-4 переведён на **протокольный режим карт**: пороговая модель сигналов исключена, карта собирается строго после прохождения протокола методики `docs/methodology/Cognitive_Identity_Map_v1.md`.
 
-Поток на ход пользователя: `answer.given` → детерминированный **Protocol Mapper** (по таблицам §§3.2–3.4) → **`protocol.coordinate_assigned`** → LLM-интерпретатор (`cognitive-interpret-answer@v1`) → **`llm.called` (purpose=answer_interpretation)** + **`answer.interpreted`** → перед следующим вопросом **`protocol.continue_offered`** (сообщение только с кнопкой «Продолжить») → по callback **`question.asked`** и текст вопроса отдельным сообщением. На 12/12 — aeon_engine собирает тип по таблице соответствий §4.1 + алгоритм §4.2, сверяет с LLM-интерпретациями (`purpose=rule_reconciliation`), пишет `card.computed`. Расхождения LLM с правилом выше `LLM_RULE_AGREEMENT_THRESHOLD` фиксируются в Book of Consciousness; правило — основной источник истины.
+Поток на ход пользователя: `answer.given` → детерминированный **Protocol Mapper** (по таблицам §§3.2–3.4) → **`protocol.coordinate_assigned`** → LLM-интерпретатор (`cognitive-interpret-answer@v1`) → **`llm.called` (purpose=answer_interpretation)** + **`answer.interpreted`** → перед следующим вопросом **`protocol.continue_offered`** (сообщение только с кнопкой «Продолжить») → по callback **`question.asked`** и текст вопроса отдельным сообщением. На 12/12 — aeon_engine собирает тип по таблице соответствий §4.1 + алгоритм §4.2 и пишет `card.computed`. Правило-mapper — единственный источник истины.
 
 **Deliverables:**
 
@@ -164,7 +164,7 @@ Event store только **INSERT**, контракт полей как в `even
 - Событие **`protocol.coordinate_assigned`** (заменяет `card_signal.received`).
 - Prompt `prompts/cognitive-interpret-answer.md` (`@v1`).
 - Событие **`answer.interpreted`** + транзакция `answer.interpreted → question.asked → send` (INV-10).
-- aeon_engine: сборка типа, сверка LLM-vs-rule, выпуск `card.computed` с payload `{protocol_version, coordinates, matched_types, disagreement_with_llm}`.
+- aeon_engine: сборка типа, выпуск `card.computed` с payload `{protocol_version, coordinates, matched_types, confidence_resolution, confidence_message, synthetic_drawing, core_unformed}`.
 - Property-based тесты на **INV-03, INV-04, INV-05 (новая формулировка), INV-10** (Vitest + fast-check).
 - Feature-flag `DIALOG_LLM_NEXT_QUESTION` (default: false на Core) — выключает iter-3 LLM-генерацию следующего вопроса.
 
@@ -173,8 +173,7 @@ Event store только **INSERT**, контракт полей как в `even
 - [ ] Cognitive-карта не назначается до 12/12 ответов протокола (INV-05).
 - [ ] На каждом протокольном ответе пользователь получает короткое объяснение, к какой координате его относит LLM; событие `answer.interpreted` зафиксировано до следующего `question.asked` (INV-10).
 - [ ] Следующий вопрос на Core берётся из очереди протокола, а не генерируется LLM.
-- [ ] Card не назначается при confidence < `CARD_CONFIDENCE_THRESHOLD` (INV-03).
-- [ ] При расхождении LLM-интерпретации с правилом выше `LLM_RULE_AGREEMENT_THRESHOLD` запись добавлена в Book of Consciousness; основной результат — от правила.
+- [ ] При confidence < `CARD_CONFIDENCE_THRESHOLD` имя типа в payload `card.computed` не показывается (только `confidence_message`) — INV-03.
 - [ ] Множественные типы (рисунок) выставляются с явным флагом «синтетический рисунок» в payload (INV-04).
 - [ ] Property-based тесты на INV-03/04/05/10 зелёные.
 

@@ -23,8 +23,6 @@ export type Config = {
   cardConfidenceThreshold: number;
   /** Уверенное совпадение без оговорок в тексте пользователю. */
   cardConfidenceStrongThreshold: number;
-  /** Порог доли совпадений mapper vs LLM для флага disagreement_with_llm. */
-  llmRuleAgreementThreshold: number;
   anthropicApiKey: string;
   anthropicModel: string;
   openaiApiKey: string;
@@ -63,6 +61,5 @@ export function loadConfig(): Config {
     cognitiveProtocolVersion: process.env.COGNITIVE_PROTOCOL_VERSION ?? 'v1',
     cardConfidenceThreshold: Number(process.env.CARD_CONFIDENCE_THRESHOLD ?? '0.5'),
     cardConfidenceStrongThreshold: Number(process.env.CARD_CONFIDENCE_STRONG_THRESHOLD ?? '0.75'),
-    llmRuleAgreementThreshold: Number(process.env.LLM_RULE_AGREEMENT_THRESHOLD ?? '0.7'),
   };
 }

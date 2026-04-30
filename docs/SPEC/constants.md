@@ -1,23 +1,18 @@
 # Константы — ÆON Map MAX Bot
 
 **Источник:** `aeon-max-bot.vibepp.yaml` → `constants`.  
-**Правило:** в коде — из конфига/ENV, не захардкоженные магические числа; каждая константа имеет «карточку» здесь.  
-**ADR:** обновлено по **ADR 002** — удалены `MIN_AGGREGATE_SIGNAL_WEIGHT_FOR_CARD` и `MIN_ANSWERS_PER_LAYER`; добавлены `COGNITIVE_PROTOCOL_VERSION` и `LLM_RULE_AGREEMENT_THRESHOLD`; `CARD_CONFIDENCE_THRESHOLD` сохраняется с новой семантикой.
+**Правило:** в коде — из конфига/ENV, не захардкоженные магические числа.  
+**ADR:** ADR 002 (+ правка 2026-04-30: снят `LLM_RULE_AGREEMENT_THRESHOLD`).
 
-| Ключ | Значение | Зачем | Ломается без | Калибровка |
-|------|----------|--------|--------------|------------|
-| CARD_CONFIDENCE_THRESHOLD | 0.72 | Мера согласованности результата карты: степень совпадения координат с ближайшим типом из таблицы соответствий методики и/или согласие LLM-интерпретации с правилом-маппером. | Карта назначается при противоречивом протоколе. | A/B retention, feedback после первых сессий |
-| MAX_QUESTIONS_PER_SESSION | 12 | Длина протокола Cognitive v1 (4×Ц + 5×М + 3×Я). Для других методик потребуется отдельная калибровка / разбиение на сессии. | Дроп в середине, либо протокол не завершается. | session_completion_rate |
-| COGNITIVE_PROTOCOL_VERSION | "v1" | Фиксирует версию методики Cognitive Identity Map, по которой собрана карта (для аудита и миграций при v2). | Карты разных версий протокола нельзя различить в БД. | обновлять при выпуске новой версии методики |
-| LLM_RULE_AGREEMENT_THRESHOLD | 0.75 | Нижняя граница согласия LLM-интерпретации с правилом-маппером. Ниже — расхождение записывается в Book of Consciousness как наблюдение (правило — основной источник истины). | Тихие расхождения LLM и правила не аудируются. | после 50–100 завершённых протоколов |
-| SESSION_IDLE_TIMEOUT_MIN | 30 | Молчание → abandoned. | Ghost sessions, утечки в Redis. | медиана времени между ответами |
-| LLM_QUESTION_TEMP | 0.7 | Температура LLM-интерпретатора. | Слишком сухо или хаос. | blind A/B операторов |
-| DAILY_SESSION_LIMIT | 3 | Лимит сессий в день на пользователя. | Злоупотребления, cost. | p99 сессий/день |
-| MAX_BOT_REPLY_TIMEOUT_SEC | 8 | Целевой UX-лимит ответа в MAX. | Повторы, дропы. | p95 LLM + overhead |
+| Ключ | Значение | Зачем |
+|------|----------|--------|
+| CARD_CONFIDENCE_THRESHOLD | 0.5 | Ниже — в payload карты не показывается имя типа (только `confidence_message`). |
+| CARD_CONFIDENCE_STRONG_THRESHOLD | 0.75 | Выше — пользователю отдаётся короткая строка без оговорок. |
+| MAX_QUESTIONS_PER_SESSION | 12 | Длина протокола Cognitive v1 (4×Ц + 5×М + 3×Я). |
+| COGNITIVE_PROTOCOL_VERSION | "v1" | Версия методики, по которой собрана карта (аудит/миграции). |
+| SESSION_IDLE_TIMEOUT_MIN | 30 | Молчание → `session.abandoned`. |
+| LLM_QUESTION_TEMP | 0.7 | Температура LLM-интерпретатора. |
+| DAILY_SESSION_LIMIT | 3 | Лимит сессий/день/пользователь. |
+| MAX_BOT_REPLY_TIMEOUT_SEC | 8 | Целевой UX-лимит ответа в MAX. |
 
-**Удалены ADR 002:**
-
-- `MIN_AGGREGATE_SIGNAL_WEIGHT_FOR_CARD` — пороговая модель веса сигналов исключена.
-- `MIN_ANSWERS_PER_LAYER` — заменено условием «протокол завершён» (см. INV-05).
-
-При добавлении константы — обновить **и** этот файл, **и** `vibepp.yaml`.
+**Удалены ADR 002:** `MIN_AGGREGATE_SIGNAL_WEIGHT_FOR_CARD`, `MIN_ANSWERS_PER_LAYER`, `LLM_RULE_AGREEMENT_THRESHOLD`.

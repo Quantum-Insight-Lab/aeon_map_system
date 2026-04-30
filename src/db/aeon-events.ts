@@ -13,7 +13,6 @@ export type InsertCardComputedParams = {
   protocolVersion: string;
   coordinates: Record<string, unknown>;
   matchedTypes: readonly string[];
-  disagreementWithLlm: boolean;
   syntheticDrawing: boolean;
   coreUnformed: boolean;
 };
@@ -39,7 +38,6 @@ export async function insertCardComputed(
       protocol_version: params.protocolVersion,
       coordinates: params.coordinates,
       matched_types: [...params.matchedTypes],
-      disagreement_with_llm: params.disagreementWithLlm,
       synthetic_drawing: params.syntheticDrawing,
       core_unformed: params.coreUnformed,
     },
