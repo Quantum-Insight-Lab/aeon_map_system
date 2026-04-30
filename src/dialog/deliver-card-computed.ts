@@ -91,7 +91,8 @@ export async function deliverCardComputed(opts: {
   const mapped: ProtocolAnswersMapped = { goals, modalities, anchors };
   const assembled = assembleCoordinates(mapped);
   const matched = matchTypes(assembled);
-  const confidence = computeConfidence(assembled, matched);
+  const confidenceResult = computeConfidence(assembled, matched);
+  const confidence = confidenceResult.confidence;
   const agreement = computeAgreement(mapperSteps, interpretedSteps);
 
   const coordsRecord = coordsPayload(assembled);
@@ -112,18 +113,17 @@ export async function deliverCardComputed(opts: {
     sessionId,
     maxUserId,
     confidence,
+    confidenceResolution: confidenceResult.resolution,
     agreement,
     matchedTypes: matched.matchedTypes.map((t) => t.name),
     disagreementWithLlm,
-    coreUnformedPreview: assembled.coreFormation === 'unformed' || assembled.primaryGoal == null,
+    coreUnformedPreview: assembled.coreFormation === 'unformed',
   });
 
+  const coreUnformed = assembled.coreFormation === 'unformed';
   let matchedNames = matched.matchedTypes.map((t) => t.name);
-  let coreUnformed = assembled.coreFormation === 'unformed' || assembled.primaryGoal == null;
-
-  if (confidence < config.cardConfidenceThreshold || coreUnformed) {
+  if (confidence < config.cardConfidenceThreshold) {
     matchedNames = [];
-    coreUnformed = true;
   }
 
   const cardIns = await insertCardComputed(pool, {
@@ -131,6 +131,8 @@ export async function deliverCardComputed(opts: {
     maxUserId,
     cardType: COGNITIVE_CARD_TYPE,
     confidence,
+    confidenceResolution: confidenceResult.resolution,
+    confidenceMessage: confidenceResult.message,
     inputAnswerIds: answerIds,
     version: COGNITIVE_CARD_COMPUTED_VERSION,
     protocolVersion: COGNITIVE_PROTOCOL_VERSION,
@@ -142,10 +144,13 @@ export async function deliverCardComputed(opts: {
   });
 
   if (cardIns.inserted && config.maxBotToken) {
+    const strongMin = config.cardConfidenceStrongThreshold;
     const line =
       matchedNames.length > 0 && matchedNames[0]
-        ? `Твой тип по карте: ${matchedNames[0]}.`
-        : 'Ядро профиля пока не сформировано однозначно — это тоже полезный результат.';
+        ? confidence >= strongMin
+          ? `Твой тип по карте: ${matchedNames[0]}.`
+          : `Твой тип по карте: ${matchedNames[0]}. ${confidenceResult.message}`
+        : confidenceResult.message;
     await sendMaxUserMessage({
       baseUrl: config.maxApiBaseUrl,
       token: config.maxBotToken,

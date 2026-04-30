@@ -19,8 +19,10 @@ export type Config = {
   /** iter-3 LLM-цепочка после legacy core:first (не используется при протоколе v1). Default false. */
   dialogLlmNextQuestion: boolean;
   cognitiveProtocolVersion: string;
-  /** INV-03: минимальная уверенность для имени типа на карте. */
+  /** Минимальная уверенность, чтобы показать имя типа на карте (< порога — только пояснение). */
   cardConfidenceThreshold: number;
+  /** Уверенное совпадение без оговорок в тексте пользователю. */
+  cardConfidenceStrongThreshold: number;
   /** Порог доли совпадений mapper vs LLM для флага disagreement_with_llm. */
   llmRuleAgreementThreshold: number;
   anthropicApiKey: string;
@@ -59,7 +61,8 @@ export function loadConfig(): Config {
     llmFollowupCount: Number(process.env.LLM_FOLLOWUP_COUNT ?? 5),
     dialogLlmNextQuestion: process.env.DIALOG_LLM_NEXT_QUESTION === 'true',
     cognitiveProtocolVersion: process.env.COGNITIVE_PROTOCOL_VERSION ?? 'v1',
-    cardConfidenceThreshold: Number(process.env.CARD_CONFIDENCE_THRESHOLD ?? '0.55'),
+    cardConfidenceThreshold: Number(process.env.CARD_CONFIDENCE_THRESHOLD ?? '0.5'),
+    cardConfidenceStrongThreshold: Number(process.env.CARD_CONFIDENCE_STRONG_THRESHOLD ?? '0.75'),
     llmRuleAgreementThreshold: Number(process.env.LLM_RULE_AGREEMENT_THRESHOLD ?? '0.7'),
   };
 }

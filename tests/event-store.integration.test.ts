@@ -58,7 +58,8 @@ describe.skipIf(!dsn)('event store (integration)', () => {
     llmFollowupCount: 5,
     dialogLlmNextQuestion: false,
     cognitiveProtocolVersion: 'v1',
-    cardConfidenceThreshold: 0.55,
+    cardConfidenceThreshold: 0.5,
+    cardConfidenceStrongThreshold: 0.75,
     llmRuleAgreementThreshold: 0.7,
   };
 

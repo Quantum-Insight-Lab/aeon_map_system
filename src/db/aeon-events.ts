@@ -6,6 +6,8 @@ export type InsertCardComputedParams = {
   maxUserId: number;
   cardType: string;
   confidence: number;
+  confidenceResolution?: string;
+  confidenceMessage?: string;
   inputAnswerIds: readonly string[];
   version: string;
   protocolVersion: string;
@@ -30,6 +32,8 @@ export async function insertCardComputed(
       max_user_id: params.maxUserId,
       card_type: params.cardType,
       confidence: params.confidence,
+      ...(params.confidenceResolution != null ? { confidence_resolution: params.confidenceResolution } : {}),
+      ...(params.confidenceMessage != null ? { confidence_message: params.confidenceMessage } : {}),
       input_answer_ids: [...params.inputAnswerIds],
       version: params.version,
       protocol_version: params.protocolVersion,
